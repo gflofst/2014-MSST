@@ -1,0 +1,45 @@
+This is pretty long (25 items), but I think it covers just about all of it. Here is a distillation of my detailed read of the IOD documentation:
+
+Big take-aways:
+- The IOD layer, with or without burst buffer support, is a critical component of the proposed IO stack
+- Failures are not considered at all.
+- DAOS is intended to be the persistent, on disk storage, but only a single version of a container is allowed.
+- The design does not consider a shared DAOS layer and has multiple fatal flaws for a data center-wide shared file system
+- The system is designed for a single user system with no failures.
+
+Detailed notes:
+- transactions are only at the IOD layer. Epochs are at the DAOS layer. They have some connection, but are not the same thing.
+- The IOD layer is proposed to be a single MPI application across all of the IO nodes. Given the tight connection between the IOD layer and the DAOS layer, there is only one IOD layer on the IO nodes. This has multiple implications:
+- Any operation that interacts with storage must go through the same IOD layer. Simultaneous application use can seriously complicate things. Explicit description of multiple separate mpirun deployments on the same IOD container emphasize the incompatibility of sharing at the IOD layer. This data must be persisted to the DAOS layer instead.
+- Any data re-sharding operation will impact the IO performance of ALL users of the IOD layer.
+- Any failure of an IO node or IOD process kills all access to storage because there is no direct access to DAOS allowed. The entire IOD layer would have to restart to regain a repaired node.
+- Because arbitrary operations on data can be deployed on the IOD layer, the likelihood of a programming fault crashing the IOD layer is dramatically higher.
+- The IOD layer has a container manager process that is functionally equivalent to a metadata service. If this is a distributed, partitioned, replicated, or single metadata service process is not mentioned. Each of these choices have lots of implications on how this works. This is the only access to metadata about what is in DAOS. There is no mention of persisting the container manager/leader service to restore from faults or to make data in DAOS visible to other users, such as those on another platform that share the same DAOS layer. The container layer has 3 additional attributes for each container (file): lowest_durable, latest_rdable, latest_wrting. 
+- The snapshot mechanism for DAOS does not adequately address the checkpoint = analysis output model. It forces new names, rather than the more logical version mechanism, for each output. 
+- The open/create mechanism is a step backwards. PVFS and LWFS both had a superior mechanism.
+- Transactions are granular at the container level (this is not explained until fairly late in the document). This precludes any ability to manage sub-operations using transaction semantics.
+- The layout in storage is forced into a column major format no matter the source language (compatibility with HDF5). There is no mention of supporting endianness. I am guessing it assumes that the reading and writing endianness will be the same or known and fixed as needed. HDF5 might define this too, but it isn't mentioned in this document.
+- The container/object {KV, array, blob} setup is insufficient by a country mile (to use a good Southern American term). For HDF-5, the file as a whole is equivalent to a container--this works fine. The H5Group idea is represented by an object. An H5Dataset is an object too. The problem here is the lack of expressiveness for the hierarchy. There is the ability to store some 'extra' data in the entry in the container, but that is only enough for two IDs. This should be done one of two ways. First, the group needs a concept of its own. The container level as well as the H5Group concept would have a key-value store as a list of children. Those children can be one of the 3 object types (KV, array, blob) or to another H5Group concept thing. Alternatively, shifting the extra space that can hold two object IDs into a list of children and extend that into the group object. The current design can probably be force-fit to make it work, but is not clean.
+- DAOS has containers and 'a few' objects created when a container is created in IOD. It can later be deleted, if you want.
+- The container IDs are not really talked about at all. Considering how important they are for grouping objects, this is a grave oversight.
+- The scoping of the IDs from the IOD layer is not explained well other than to say that they incorporate the transaction ID to some degree. There is no UUID-style uniqueness to it.
+- DAOS-level round-robin striping is old school and should be replaced by something more modern like the pseudo-random number generator of Ceph.
+- Table 3 lists a 'migrate' operation that is missing from table 2. It is mentioned a couple of times, but never adequately defined anywhere.
+- The idea of 'stale' data is not well defined until the end of the document. The concept is problematic because of the issues with purging of transaction versions.
+- It is not possible to migrate to DAOS partially for a transaction. It must be the entire transaction. This makes sharing all but impossible without finishing and persisting a transaction.
+- The concept of "bundles" is mentioned, but never adequately defined. It seems to be a way to send a list of objects to retrieve from DAOS into a single IOD.
+- The function and purpose of replicas is not well defined. There are troubling aspects, such as the creation of a new transaction ID after a successful replication. What happens when you replicate version 4 and version 5 has already been written? Is the replica now version 6?
+- The non-simultaneous r/w mechanism seems to prevent the HDF5 SWMR concept (single-writer, multiple-readers).
+- Under 'Transaction status synchronization', Lots of problems:
+- By just counting connections from some client to an IOD as an operation, it allows both an interrupted send as well as a resend due to a failed ACK message receipt to decrease the expected clients remaining count. This is just begging for failures.
+- The proposal for global communication among the IOD processes to handle a 'global' transaction is a big problem. First, does global mean all IOD processes, all IO nodes, or all compute nodes? It seems to be all IOD processes. Second, this kind of communication pattern does not scale well enough, in particular for large numbers of IOD processes.
+- re-calling IOD_initialize when the number of clients changes is a bad idea. Since it is a rolled-up count, there is not an effective way to tell if it is adding or removing clients indicating how to adjust the remaining expected clients. This is a recipe for disaster. It also does not take into account failures.
+- 'start and finish, slip' is missing case 3 where there is a failure and we never close out a transaction. It does hint elsewhere in the document that an unclosed transaction will prevent access to anything newer perpetually. There is no mention of how to do a garbage collection based on timeouts or other mechanism to recover from some incomplete transaction.
+- The 'consistent semantic section has a couple of problems:
+- a transaction has to be in the readable state in IOD to be persisted to DAOS. That means that you cannot persist a checkpoint if a previous checkpoint output failed.
+- the 'stale' data and purging setup has lots of problems. The advantage of not copying data for a new transaction that does not change from a previous transaction is lost because when you purge an old version, you may kill the ability to read all future versions that still depend on that version. IOD should be smart enough to not break things like this, particularly considering the amount of other things that IOD is proposing to do.
+- Persisting only 1 version at a time is just bad. See much earlier.
+- The use of checksums for data integrity is a good idea and should be extended top-to-bottom. In particular, it can shift IOD from just counting complete operations (since it doesn't really count clients) to counting complete AND correct operations.
+- The lack of mention of failure handling is extremely troubling. There are some tremendous implications of failures in the design choices and it is clear that these modes were not considered based on the design presented.
+- FAQ #4 makes this design worse. It eliminates the ability to have the IOD layer as the general system service that it is supposed to be. It emphasizes that this is a nice design for a single user system that does not experience failures. Add additional users or failures and the design fails.
+- FAQ #10 emphasizes the problem with not having the ability to detect a failure--future transactions cannot become readable.

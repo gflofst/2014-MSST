@@ -1,0 +1,369 @@
+% BibTeX bibliography file
+
+@InProceedings{lofstead:2011:nessie-staging,
+  author = {Jay Lofstead and Ron Oldfiend and Todd Kordenbrock and Charles
+  Reiss},
+  title = {Extending Scalability of Collective IO Through Nessie and Staging},
+  booktitle = {The Petascale Data Storage Workshop at Supercomputing},
+  year = {2011},
+  month = {November},
+  address = {Seattle, WA},
+  abstract = {The increasing fidelity of scientific simulations as they scale
+  towards exascale sizes is straining the proven IO techniques championed
+  throughout terascale computing. Chief among the successful IO techniques is
+  the idea of collective IO where processes coordinate and exchange data prior
+  to writing to storage in an effort to reduce the number of small, independent
+  IO operations. As well as collective IO works for efficiently creating a data
+  set in the canonical order, 3-D domain decompositions prove troublesome due
+  to the amount of data exchanged prior to writing to storage. When each
+  process has a tiny piece of a 3-D simulation space rather than a complete
+  `pencil' or `plane', 2-D or 1-D domain decompositions respectively, the
+  communication overhead to rearrange the data can dwarf the time spent
+  actually writing to storage~\cite{MPIcollectiveFix}. Our approach seeks to
+  transparently increase scalability and performance while maintaining both the
+  IO routines in the application and the final data format in the storage
+  system. Accomplishing this leverages both the Nessie~\cite{nessie} RPC
+  framework and a staging area with staging services. Through these tools, we
+  employ a variety of data processing operations prior to invoking the native
+  API to write data to storage yielding as much as a 3$\times$ performance
+  improvement over the native calls.}
+}
+
+@InProceedings{abbasi:2007:datatap,
+  author = {Abbasi, Hasan and Wolf, Matthew and Schwan, Karsten},
+  title = {{LIVE} Data Workspace: A Flexible, Dynamic and Extensible Platform
+  for Petascale Applications},
+  booktitle = {CLUSTER '07: Proceedings of the 2007 IEEE International
+  Conference on Cluster Computing},
+  year = {2007},
+  pages = {341--348},
+  publisher = {IEEE Computer Society},
+  address = {Washington, DC, USA}
+}
+
+@Conference{Abbasi:2009:datatap,
+  author = {Hasan Abbasi and Jay Lofstead and Fang Zheng and Scott Klasky and
+  Karsten Schwan and Matthew Wolf},
+  title = {Extending I/O Through High Performance Data Services},
+  booktitle = {Cluster Computing},
+  year = {2009},
+  month = {September},
+  publisher = {IEEE International},
+  address = {Luoisiana, LA},
+  abstract = {The complexity of HPC systems has increased the burden on the
+  developer as applications scale to hundreds of thousands of processing cores.
+  I/O processing is one area where extensive efforts are required to achieve
+  acceptable performance and scalability. A successful approach to high
+  performance I/O demonstrated by our group and others is to use select nodes
+  for data staging, where data is evacuated from compute to staging nodes
+  before being moved to the disk via the file system. This paper shows that I/O
+  performance can be improved substantially by carefully managing how data
+  staging is performed, and by enriching such I/O actions through additional
+  "data services", lightweight abstractions for carrying out data processing
+  such as transformation, reduction and scheduled storage. We evaluate data
+  services on actual application codes within our data staging framework for
+  asynchronous data movement, and we also describe the impact of resource
+  management in synchronous environments.}
+}
+
+@InProceedings{nisar:2008:staging,
+  author = {Nisar,, Arifa and Liao,, Wei-keng and Choudhary,, Alok},
+  title = {Scaling Parallel {I/O} Performance Through {I/O} Delegate and
+  Caching System},
+  booktitle = {SC '08: Proceedings of the 2008 ACM/IEEE Conference on
+  Supercomputing},
+  year = {2008},
+  pages = {1--12},
+  publisher = {IEEE Press},
+  address = {Piscataway, NJ, USA}
+}
+
+@InProceedings{zheng:2010:predata,
+  author = {Fang Zheng and Hasan Abbasi and Ciprian Docan and Jay Lofstead and
+  Scott Klasky and Qing Liu and Manish Parashar and Norbert Podhorszki and
+  Karsten Schwan and Matthew Wolf},
+  title = {{PreDatA }- Preparatory Data Analytics on {Peta-Scale} Machines},
+  booktitle = {In Proceedings of 24th IEEE International Parallel and
+  Distributed Processing Symposium, April, Atlanta, Georgia},
+  year = {2010},
+  abstract = {Peta-scale scientific applications running on High End Computing
+  (HEC) platforms can generate large volumes of data. For high performance
+  storage and in order to be useful to science end users, such data must be
+  organized in its layout, indexed, sorted, and otherwise manipulated for
+  subsequent data presentation, visualization, and detailed analysis. In
+  addition, scientists desire to gain insights into selected data
+  characteristics `hidden' or `latent' in these massive datasets while data is
+  being produced by simulations. PreDatA, short for Preparatory Data Analytics,
+  is an approach to preparing and characterizing data while it is being
+  produced by the large scale simulations running on peta-scale machines. By
+  dedicating additional compute nodes on the machine as `staging' nodes and by
+  staging simulations' output data through these nodes, PreDatA can exploit
+  their computational power to perform select data manipulations with lower
+  latency than attainable by first moving data into file systems and storage.
+  Such intransit manipulations are supported by the PreDatA middleware through
+  asynchronous data movement to reduce write latency, application-specific
+  operations on streaming data that are able to discover latent data
+  characteristics, and appropriate data reorganization and metadata annotation
+  to speed up subsequent data access. PreDatA enhances the scalability and
+  exibility of the current I/O stack on HEC platforms and is useful for data
+  pre-processing, runtime data analysis and inspection, as well as for data
+  exchange between concurrently running simulations.}
+}
+
+@InProceedings{bent:2012:challenges,
+  author = {Bent, J. and Grider, G. and Kettering, B. and Manzanares, A. and
+  McClelland, M. and Torres, A. and Torrez, A.},
+  title = {Storage challenges at Los Alamos National Lab},
+  booktitle = {Mass Storage Systems and Technologies (MSST), 2012 IEEE 28th
+  Symposium on},
+  year = {2012},
+  month = {April},
+  pages = {1-5},
+  keywords = {parallel databases;HPC;IO patterns;Los Alamos national
+  lab;concurrent write performance;parallel IO;parallel file systems;storage
+  challenges;usability headaches;Bandwidth;Frequency
+  measurement;Hardware;Libraries;Servers;Tuning;Usability},
+  abstract = {There yet exist no truly parallel file systems. Those that make
+  the claim fall short when it comes to providing adequate concurrent write
+  performance at large scale. This limitation causes large usability headaches
+  in HPC. Users need two major capabilities missing from current parallel file
+  systems. One, they need low latency interactivity. Two, they need high
+  bandwidth for large parallel IO; this capability must be resistant to IO
+  patterns and should not require tuning. There are no existing parallel file
+  systems which provide these features. Frighteningly, exascale renders these
+  features even less attainable from currently available parallel file systems.
+  Fortunately, there is a path forward.}
+}
+
+@InProceedings{bent:2012:burst-buffer,
+  author = {Bent, J. and Faibish, S. and Ahrens, J. and Grider, G. and
+  Patchett, J. and Tzelnic, P. and Woodring, J.},
+  title = {Jitter-free co-processing on a prototype exascale storage stack},
+  booktitle = {Mass Storage Systems and Technologies (MSST), 2012 IEEE 28th
+  Symposium on},
+  year = {2012},
+  month = {April},
+  pages = {1-5},
+  keywords = {parallel processing;storage management;storage media;IO
+  forwarding;exascale storage stack;extreme scale high performance
+  computing;interconnect network;jitter-free coprocessing;parallel file
+  systems;solid state devices;spindle-based parallel file system;storage
+  media;Bandwidth;Computational modeling;Conferences;Data analysis;Data
+  visualization;Radio access networks;USA Councils},
+  abstract = {In the petascale era, the storage stack used by the extreme scale
+  high performance computing community is fairly homogeneous across sites. On
+  the compute edge of the stack, file system clients or IO forwarding services
+  direct IO over an interconnect network to a relatively small set of IO nodes.
+  These nodes forward the requests over a secondary storage network to a
+  spindle-based parallel file system. Unfortunately, this architecture will
+  become unviable in the exascale era. As the density growth of disks continues
+  to outpace increases in their rotational speeds, disks are becoming
+  increasingly cost-effective for capacity but decreasingly so for bandwidth.
+  Fortunately, new storage media such as solid state devices are filling this
+  gap; although not cost-effective for capacity, they are so for performance.
+  This suggests that the storage stack at exascale will incorporate solid state
+  storage between the compute nodes and the parallel file systems. There are
+  three natural places into which to position this new storage layer: within
+  the compute nodes, the IO nodes, or the parallel file system. In this paper,
+  we argue that the IO nodes are the appropriate location for HPC workloads and
+  show results from a prototype system that we have built accordingly. Running
+  a pipeline of computational simulation and visualization, we show that our
+  prototype system reduces total time to completion by up to 30%.}
+}
+
+@InProceedings{lofstead:2012:txn-metadata,
+  author = {Jay Lofstead and Jai Dayal},
+  title = {Transactional Parallel Metadata Services for Application
+  Workdflows},
+  booktitle = {In Proceedings of High Performance Computing Meets Databases at
+  Supercomputing},
+  year = {2012},
+  abstract = {Scientific simulations have a different relationship with all of
+  the data generated than many data analysis systems that support applications
+  like the Large Hadron Collider and the SLOAN Sky Survey. In many cases,
+  simulations need to generate large number of intermediate data sets that
+  ultimately are thrown away once some analysis routines are applied to the
+  data. This generates some summarized, derived result that inspires some
+  scientific insight. Traditionally, these routines use the storage array to
+  persist the intermediate results between each step of the data analysis
+  process. The volume and frequency of this data can be overwhelming compared
+  with the available IO bandwidth on the machine. To handle this volume and
+  frequency, current research efforts are determining how to move the storage
+  of intermediate data from the storage array into the memory of the compute
+  area. Then, the analysis routines are incorporated to create Integrated
+  Application Workflows (IAWs). Data staging techniques require some mechanism
+  to replace the semantics offered by the file system to control data movement
+  and access. As part of an HPC-focused transaction services project, a first
+  pass at a transactional metadata service for in compute area data storage is
+  being developed.}
+}
+
+@InProceedings{lofstead:2012:txn,
+  author = {Jay Lofstead and Jai Dayal and Karsten Schwan and Ron Oldfield},
+  title = {D2T: Doubly Distributed Transactions for High Performance and
+  Distributed Computing},
+  booktitle = {IEEE Cluster Conference},
+  year = {2012},
+  month = {September},
+  address = {Beijing, China},
+  abstract = {Current exascale computing projections suggest rather than a
+  monolithic simulation running for the majority of the machine, a collection
+  of components comprising the scientific discovery process will be employed in
+  an online workflow. This move to an online workflow scenario requires
+  knowledge that inter-step operations are completed and correct before the
+  next phase begins. Further, dynamic load balancing or fault tolerance
+  techniques may dynamically deploy or redeploy resources for optimal use of
+  computing resources. These newly configured resources should only be used if
+  they are successfully deployed. Our D2T system offers a mechanism to support
+  these kinds of operations by providing database-like transactions with
+  distributed servers and clients. Ultimately, with adequate hardware support,
+  full ACID compliance is possible for the transactions. To prove the viability
+  of this approach, we show that the D2T protocol has less than 1.2 seconds of
+  overhead using 4096 clients and 32 servers with good scaling characteristics
+  using this initial prototype implementation.}
+}
+
+@InProceedings{dayal:2013:io-containers,
+  author = {Jai Dayal and Jianting Cao and Greg Eisenhauer and Karsten Schwan
+  and Matthew Wolf and Fang Zheng and Hasan Abbasi and Scott Klasky and Norbert
+  Podhorszki and Jay Lofstead},
+  title = {I/O Containers: Managing the Data Analytics and Visualization
+  Pipelines of High End Codes},
+  booktitle = {In Proceedings of International Workshop on High Performance
+  Data Intensive Computing (HPDIC 2013) held in conjunction with IPDPS 2013},
+  year = {2013},
+  address = {Boston, MA},
+  note = {Best Paper Award},
+  abstract = {Lack of I/O scalability is known to cause measurable slowdowns
+  for large-scale scientific applications running on high end machines. This is
+  prompting researchers to devise 'I/O staging' methods in which outputs are
+  processed via online analysis and visualization methods to support desired
+  science outcomes. Organized as online workflows and carried out in I/O
+  pipelines, these analysis components run concurrently with science
+  simulations, often using a smaller set of nodes on the high end machine
+  termed 'staging areas'. This paper presents a new approach to dealing with
+  several challenges arising for such online analytics, including: how to
+  efficiently run multiple analytics components on staging area resources
+  providing them with the levels of end-to-end performance they need and how to
+  manage staging resources when analytics actions change due to user or
+  data-dependent behavior. Our approach designs and implements middleware
+  constructs that delineate and manage I/O pipeline resources called 'I/O
+  Containers'. Experimental evaluations of containers with realistic scientific
+  applications demonstrate the feasibility and utility of the approach.}
+}
+
+@InProceedings{lofstead:2013:pdsw-txn,
+  author = {Jay Lofstead and Jai Dayal and Ivo Jimenez and Carlos Maltzahn},
+  title = {Efficient Transactions for Parallel Data Movement},
+  booktitle = {The Petascale Data Storage Workshop at Supercomputing},
+  year = {2013},
+  month = {November},
+  address = {Denver, CO},
+  abstract = {The rise of Integrated Application Workflows (IAWs) for
+  processing data prior to storage on persistent media prompts the need to
+  incorporate features that reproduce many of the semantics of persistent
+  storage devices. One such feature is the ability to manage data sets as
+  chunks with natural barriers between different data sets. Towards that end,
+  we need a mechanism to ensure that data moved to an intermediate storage area
+  is both complete and correct before allowing access by other processing
+  components. The D2T protocol offers such a mechanism. The initial development
+  suffered from scalability limitations and undue requirements on server
+  processes. The current version has addressed these limitations and has
+  demonstrated scalability with low overhead.}
+}
+
+@Article{Lamport:1998:paxos,
+  author = {Leslie Lamport and Keith Marzullo},
+  title = {The part-time parliament},
+  journal = {ACM Transactions on Computer Systems},
+  year = {1998},
+  volume = {16},
+  pages = {133--169}
+}
+
+@InProceedings{Hunt:2010:zookeeper,
+  author = {Patrick Hunt and Mahadev Konar and Flavio P. Junqueira and Benjamin
+  Reed},
+  title = {ZooKeeper: Wait-free Coordination for Internet-scale Systems},
+  booktitle = {In USENIX Annual Technical Conference},
+  year = {2010}
+}
+
+@Misc{barton:2013:fastforward,
+  key = {Barton},
+  author = {E. Barton},
+  title = {Lustre* - Fast Forward to Exascale},
+  year = {2013},
+  month = {March},
+  howpublished = {Lustre User Group Summit 2013},
+  URL = {www.youtube.com/watch?v=pn_EEbmohDU}
+}
+
+@Misc{lombardi:2013:epochs,
+  key = {epochs},
+  author = {Johann Lombardi},
+  title = {High Level Design - Epoch Recovery, June 25th, 2013},
+  year = {2013},
+  month = {June},
+  howpublished = {Intel FastForward Wiki},
+  URL =
+  {https://wiki.hpdd.intel.com/download/attachments/12127153/M4.1%20Epoch\_Recovery%20v2.pdf?version=1&modificationDate=1382110631000&api=v2}
+}
+
+@InProceedings{burrows:2006:chubby,
+  author = {Michael Burrows},
+  title = {The Chubby Lock Service for Loosely-Coupled Distributed Systems},
+  booktitle = {OSDI},
+  editor = {Brian N. Bershad and Jeffrey C. Mogul},
+  year = {2006},
+  pages = {335-350},
+  publisher = {USENIX Association}
+}
+
+@Article{ganesh:2003:gossip-protocols,
+  author = {Ganesh, A.J. and Kermarrec, A.-M. and Massoulie, L.},
+  title = {Peer-to-peer membership management for gossip-based protocols},
+  journal = {Computers, IEEE Transactions on},
+  year = {2003},
+  volume = {52},
+  number = {2},
+  pages = {139-149},
+  keywords = {Internet;multicast protocols;probability;Internet-wide
+  distributed applications;SCAMP;Scalable Membership
+  protocol;convergence;decentralized protocol;gossip-based protocols;group
+  communication;large-scale groups;peer-to-peer membership
+  management;reliability properties;scalability properties;self-organizing
+  protocol;Computer crashes;Helium;Internet;Knowledge management;Large-scale
+  systems;Multicast protocols;Peer to peer
+  computing;Scalability;Subscriptions;Telecommunication network reliability},
+  abstract = {Gossip-based protocols for group communication have attractive
+  scalability and reliability properties. The probabilistic gossip schemes
+  studied so far typically assume that each group member has full knowledge of
+  the global membership and chooses gossip targets uniformly at random. The
+  requirement of global knowledge impairs their applicability to very
+  large-scale groups. In this paper, we present SCAMP (Scalable Membership
+  protocol), a novel peer-to-peer membership protocol which operates in a fully
+  decentralized manner and provides each member with a partial view of the
+  group membership. Our protocol is self-organizing in the sense that the size
+  of partial views naturally converges to the value required to support a
+  gossip algorithm reliably. This value is a function of the group size, but is
+  achieved without any node knowing the group size. We propose additional
+  mechanisms to achieve balanced view sizes even with highly unbalanced
+  subscription patterns. We present the design, theoretical analysis, and a
+  detailed evaluation of the basic protocol and its refinements. Simulation
+  results show that the reliability guarantees provided by SCAMP are comparable
+  to previous schemes based on global knowledge. The scale of the experiments
+  attests to the scalability of the protocol.}
+}
+
+@InProceedings{zhang:2010:zfs,
+  author = {Yupu Zhang and Abhishek Rajimwale and Andrea C. Arpaci-Dusseau and
+  Remzi H. Arpaci-Dusseau},
+  title = {End-to-end Data Integrity for File Systems: A ZFS Case Study},
+  booktitle = {FAST},
+  editor = {Randal C. Burns and Kimberly Keeton},
+  year = {2010},
+  pages = {29-42},
+  publisher = {USENIX}
+}
+
