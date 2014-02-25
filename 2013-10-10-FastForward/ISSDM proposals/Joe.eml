@@ -1,0 +1,83 @@
+Delivered-To: carlosm@soe.ucsc.edu
+Received: by 10.58.234.40 with SMTP id ub8csp69723vec;
+        Fri, 10 May 2013 12:05:16 -0700 (PDT)
+X-Received: by 10.66.88.105 with SMTP id bf9mr19024991pab.175.1368212716300;
+        Fri, 10 May 2013 12:05:16 -0700 (PDT)
+Return-Path: <buck@soe.ucsc.edu>
+Received: from mail-da0-x22e.google.com (mail-da0-x22e.google.com [2607:f8b0:400e:c00::22e])
+        by mx.google.com with ESMTPS id lb5si2460397pbc.90.2013.05.10.12.05.15
+        for <carlosm@soe.ucsc.edu>
+        (version=TLSv1 cipher=ECDHE-RSA-RC4-SHA bits=128/128);
+        Fri, 10 May 2013 12:05:16 -0700 (PDT)
+Received-SPF: pass (google.com: domain of buck@soe.ucsc.edu designates 2607:f8b0:400e:c00::22e as permitted sender) client-ip=2607:f8b0:400e:c00::22e;
+Authentication-Results: mx.google.com;
+       spf=pass (google.com: domain of buck@soe.ucsc.edu designates 2607:f8b0:400e:c00::22e as permitted sender) smtp.mail=buck@soe.ucsc.edu;
+       dkim=pass header.i=@ucsc.edu
+Received: by mail-da0-f46.google.com with SMTP id e20so2397037dak.33
+        for <carlosm@soe.ucsc.edu>; Fri, 10 May 2013 12:05:15 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=ucsc.edu; s=ucsc-google;
+        h=x-received:message-id:date:from:user-agent:mime-version:to:subject
+         :content-type:content-transfer-encoding;
+        bh=FbMa6LTKylbRZQ2Nw0tGxKmAM7NpIoGFTGvZsG9veC8=;
+        b=L193ginQ+IfO/NQSX/5VH3G98/wwGa161ULrwKUi5mq5p3Nii+WwKjDI9tDV715EvW
+         fIW+neVmGxwznEomdj3pKue7qwcnw4pwkZY8br1pu6ACg0c6t4tLhEzSJZQ91TFq6C+T
+         6+WAGtaMUDQdWx9lWZAVcqad6EuvjeT7iZczM=
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=google.com; s=20120113;
+        h=x-received:message-id:date:from:user-agent:mime-version:to:subject
+         :content-type:content-transfer-encoding:x-gm-message-state;
+        bh=FbMa6LTKylbRZQ2Nw0tGxKmAM7NpIoGFTGvZsG9veC8=;
+        b=iwgnPT4jRuRn8H/veMbYFdHcStB5MR+4Yv5tiylH0RtAMU+8vaR01zj1GRBco4HBam
+         54PhIWYS6XGrLQ8bp8qMqMj+gnj4Fy89wL4wmyjDyL6SosfopeKPDZf2Vffffc272a8N
+         RCqQpKeZOj3VWYlSQPPXsQcnG5bYlJckCyR2HrzzjuSFW+RupdNmG7qqiTiSOKVwz63k
+         7ySwkth2wOM5XFW/YPWK0kX2t/iPkqjIuEJFiGX34sYDJajvGduBE0Qtk1rU52J4ZdQA
+         mPJJTT1Z/jXpTgVpOBCP7huUapfwaOUiJEc2Xwk53kA1e6sDcMEHcqUOGw06AjSgvRsS
+         JyQQ==
+X-Received: by 10.66.233.97 with SMTP id tv1mr19198714pac.96.1368212715855;
+        Fri, 10 May 2013 12:05:15 -0700 (PDT)
+Return-Path: <buck@soe.ucsc.edu>
+Received: from [192.168.1.113] (c-24-6-91-4.hsd1.ca.comcast.net. [24.6.91.4])
+        by mx.google.com with ESMTPSA id pa2sm3926834pac.9.2013.05.10.12.05.14
+        for <carlosm@soe.ucsc.edu>
+        (version=TLSv1 cipher=ECDHE-RSA-RC4-SHA bits=128/128);
+        Fri, 10 May 2013 12:05:14 -0700 (PDT)
+Message-ID: <518D44E9.90607@soe.ucsc.edu>
+Date: Fri, 10 May 2013 12:05:13 -0700
+From: Joe Buck <buck@soe.ucsc.edu>
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:17.0) Gecko/20130329 Thunderbird/17.0.5
+MIME-Version: 1.0
+To: Carlos Maltzahn <carlosm@soe.ucsc.edu>
+Subject: blerb for the LANL folks
+Content-Type: text/plain; charset=ISO-8859-1; format=flowed
+Content-Transfer-Encoding: 7bit
+X-Gm-Message-State: ALoCoQlKV3YEICnI0NSRtKD38fwPLrkyNM5MZOWIzWXE10m8SsEhZQ5VrZTCar5Eq9r/JTxad8jv
+
+Carlos,
+Here's the blurb on applying our SciHadoop / SIDR work to the Fast 
+Forward work. In addition to this, I think we'd be wise to push the idea 
+of extending Ceph to store portion of the HDF5 data set in RADOS, as 
+objects. This would give us a leg up on making subsequent analytics more 
+efficient and open the door for doing analytics in the storage system 
+itself (QoS concerns permitting).
+
+In looking at the Fast Forward proposal, I see several opportunities for 
+integrating / expanding the SciHadoop / SIDR work into the IOD layer.
+
+1) in-flight analytics. In looking at the FF documents and talking to 
+those involved in the project, it seems, to me, that analytics being run 
+in the IOD will likely need to be data-centric (processing whatever data 
+arrives at the IOD with computations using the semantic knowledge 
+packaged with the data). The will require rewriting existing analytic 
+code into a form that looks similar to Hadoop Map tasks and our existing 
+work in SciHadoop is directly applicable
+
+2) In the scenario where IOD's can exchange data while performing 
+analysis, the dynamic routing work in SIDR can be leveraged to make that 
+communication more efficient and enable analysis to proceed more readily
+
+3) Our work on efficient communication of intermediate data can reduce 
+the amount of network traffic and memory consumed by data travelling 
+from the IOD's to DAOS nodes (and between IODs)
+
+-Joe Buck
