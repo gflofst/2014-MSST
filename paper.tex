@@ -56,10 +56,12 @@
 \maketitle
 
 \begin{abstract}
-The Fast Forward effort to define a next generation filesystem has made
-admirable contributions in architecture and design. Formalizing the general
-idea of data staging as burst buffers for the file system will help manage
-the performance variability and offer the data processing opportunities
+With phase 1 of the Fast Forward Storage and IO Stack project complete, it is
+an excellent opportunity to evaluate many of the decisions made to feed into
+the phase 2 effort. The initial effort to define a next generation filesystem
+has made admirable contributions in architecture and design. Formalizing the
+general idea of data staging as burst buffers for the file system will help
+manage the performance variability and offer the data processing opportunities
 outside the main compute and file system. Adding a tranasctional mechanism to
 manage faults and data visilibilty helps enable effective analytics without
 having to work around the IO stack semantics.
@@ -74,10 +76,10 @@ operators can offer some insights for refining the Burst Buffer concept.
 
 This paper examines some of the choices made by the FastForward team and
 compares them with other options and offers observations and suggestions based
-on these other efforts.  This will include some non-core contributions, such
-as some of the demonstration components generated while implementing \DDT,
-to make suggestios that may help the next generation design for how the IO
-stack works as a whole.
+on these other efforts.  This will include some non-core contributions of other
+projects, such as some of the demonstration metadata and data storage
+components generated while implementing \DDTns, to make suggestions that may
+help the next generation design for how the IO stack works as a whole.
 
 \end{abstract}
 
@@ -95,7 +97,10 @@ to develop a design and prototype for an IO stack suitable for the extreme
 scale environment. This is a joint effort led by the Intel Lustre team, Los
 Alamos National Laboratory, EMC, and the HDF Group. This team has developed a
 specification set~\cite{fastforward:2014:docs} for a future IO stack to address
-the identified challenges.
+the identified challenges. The first phase recently completed with a second
+phase getting underway. The core focus of the first phase was basic
+functionality and design. The second phase will refine this design
+incorporating fault recovery and other features missing from the first phase.
 
 The basic architecture incorporates five layers. The top layer is a high level
 IO library, such as the demonstration HDF-5 library. The intent is to only have
@@ -117,43 +122,43 @@ slower trickle out to the central storage array. It can also be used to
 retrieve objects from the central storage array for more efficient read
 operations and offer data filtering to make client reads more efficient.
 Second, it offers the transaction mechanism for controlling data set visibility
-and to manage faults. Third, data processing operations can be placed in the
-IOD. This operations are inteded to offer data rearrangement, filtering, and
-similar operations prior to it reaching the central storage array.
+and to manage faults that should prevent a data set from being used. Third,
+data processing operations can be placed in the IOD. This operations are
+inteded to offer data rearrangement, filtering, and similar operations prior to
+it reaching the central storage array.
 
-This offloads the requirement for collective two-phase data sieving
-on the compute nodes to reorganize data. This technique has been proven
-effective at reducing the total time for writing data due to fewer participants
-involved in the communication patterns~\cite{lofstead:2011:nessie-staging}.
-Beyond these broad items, there are many important details some of which are
-examined in more detail below.
+Offloading the collective two-phase data sieving from the compute nodes to
+reorganize data has proven effective at reducing the total time for writing
+data due to fewer participants involved in the communication
+patterns~\cite{lofstead:2011:nessie-staging}.  Beyond these broad items, there
+are many important details some of which are examined in more detail below.
 
-The bottom two layers are the Data Access Object Storage (DAOS) and Virtual
+The bottom two layers are the Data Access Object Storage (DAOS) and Versioning
 Object Storage Device (VOSD). DAOS is the typical interface that represents
 the individual objects stored including the semantics related to ``files''.
 VSOD is the actual storage mechanism for the objects defined at the DAOS layer.
 
 The focus of this paper is primarily the IOD layer given the critical role it
-has in the performance and functionality of the entire stack. Some of the key
-features explored in this paper all have a focus on the IOD layer motivating
-the focus of this examination.
+has in the performance and functionality of the entire stack. Most of the key
+features explored in this paper all have a strong presence in the IOD layer
+motivating the focus of this examination.
 
-Incorporated into the design of these layers and the function of some of these
-layers themsleves, such as the IOD layer, are features to manage both burst IO
-performance and faults. In particular, the IOD layer's use of burst buffers
-attempts to absorb a massive data dump from the compute area that is then
-trickled to the persistent storage area only if desired. Otherwise, it can be
-stored locally on optional SSDs for use by analysis routines eliminating the
-need to use slower rotational media as the intermediary between a simulation
-and the analysis code.
+%Incorporated into the design of these layers and the function of some of these
+%layers themsleves, such as the IOD layer, are features to manage both burst IO
+%performance and faults. In particular, the IOD layer's use of burst buffers
+%attempts to absorb a massive data dump from the compute area that is then
+%trickled to the persistent storage area only if desired. Otherwise, it can be
+%stored locally on optional SSDs for use by analysis routines eliminating the
+%need to use slower rotational media as the intermediary between a simulation
+%and the analysis code.
 
-A second feature is the incorporation of a transaction like mechanism into the
-IOD layer and a related epochs feature into the DAOS layer. This feature offers
-a mechanism to avoid making incomplete data visible to other users and offer a
-level of protection if the data can be stored on the optional SSDs. The
-implications of how these concepts are designed are important to consider for
-the final design. Because they control data visibility and manage faults for
-output operations, they are key features.
+%A second feature is the incorporation of a transaction like mechanism into the
+%IOD layer and a related epochs feature into the DAOS layer. This feature offers
+%a mechanism to avoid making incomplete data visible to other users and offer a
+%level of protection if the data can be stored on the optional SSDs. The
+%implications of how these concepts are designed are important to consider for
+%the final design. Because they control data visibility and manage faults for
+%output operations, they are key features.
 
 The rest of the paper is organized as follows. Section~\ref{sec:burst}
 discusses some of the features of incoporating burst buffers as designed and
@@ -164,10 +169,11 @@ also offers a comparison to the \DDT system given the very similar high-level
 design and motivating use case.  Section~\ref{sec:optimizations} discusses some
 of the optimizations offered by the current design and how and when these
 optimizations will work best. It also explores some of the dark corners that
-may yield performance issues with the current design. Finally,
+may yield performance issues with the current design. 
 Section~\ref{sec:summary} disucsses the system overall with recommendations on
 what design elements should be considered based on broader issues with current
-HPC data centers.
+HPC data centers. The paper is conclued in Section~\ref{sec:conclusion} with
+a summary of the broad issues covered in the paper.
 
 \section{Burst Buffers}
 \label{sec:burst}
@@ -208,26 +214,30 @@ operations. The given ratios of compute processes to staging process examined
 is representative for future extreme scale platforms. If anything, the ratios
 offer more staging processes than IOD processes would be available.
 
-By concentrating this functionality into the storage stack, two problems arise.
-First, the amount of network bandwidth, IO bandwidth, and compute power
+By concentrating this functionality into the storage stack, three problems
+arise.  First, the amount of network bandwidth, IO bandwidth, and compute power
 consumed for example operations from a single application is likely to
 completely monopolize the IOD processes. Second, if space and time partitioning
 is used instead, the functionality risks being too small to be useful. Third,
-the hardware performance or SSDs is questionable. Current NAND-based flash
-devices top out at around 400 MB/sec. The key spec that is missing from this
-number is that 400 MB/sec is a measure of the fixed number of available IOPS
-multipled by the block size. This represents the ideal streaming performance
-possible. The problem is that it costs an IOP to read 1 byte or 1 block. It
-costs 1 IOP to write a full block--usually. In some cases, it will cost 2 IOPs.
-This accounts for the required pre-erase write prior to writing the block. In
-the worst case, it can be 3 IOPS per write. This would be for a partial block
-write (read the old block, erase, write the new block). One-third of 400
-MB/sec, about 133 MB/sec, is well below the streaming performance of HDDs.
-Granted, there is still rotational and seek latency to deal with for HDDs, but
-the advantage for SSDs has evaporated and potentially turned into a penalty.
+the hardware performance advantage for SSDs is questionable. Current NAND-based
+flash devices top out at around 400 MB/sec. The key spec that is missing from
+this number is that 400 MB/sec is a measure of the fixed number of available
+IOPS multipled by the block size. This represents the ideal streaming
+performance possible. The problem is that it costs an IOP to read 1 byte or 1
+block (4KB or 8KB, depending on the device). It costs 1 IOP to write a full
+block--usually. In some cases, it will cost 2 IOPs.  This accounts for the
+required pre-erase write prior to writing to a reused block. In the worst case,
+it can be 3 IOPS per write. This would be for a partial block write (read the
+old block, erase, write the modified block). One-third of 400 MB/sec, about 133
+MB/sec, is well below the streaming performance of HDDs.  Granted, there is
+still rotational and seek latency to deal with for HDDs, but the advantage for
+SSDs has evaporated and potentially turned into a penalty at a considerable
+cost premium.  There are faster SSD solutions on the market that incorporate
+DRAM for caching and using the PCIe bus, for example, but their price precludes
+them from use in an extreme scale platform.
 
 Given these features, the optionality and even incorporation of burst buffers
-in the current design should be reconsidered. Much of the advanced, key
+in the current design should be carefully considered. Much of the advanced, key
 functionality proposed as they are currently designed ultimatey relies on the
 existence of burst buffers to work. Further thought about how to have an IOD
 layer both with and without a burst buffer is required before they can be
@@ -244,8 +254,9 @@ or not and control access through treating the transaction ID as a version
 identifier. At the DAOS layer, they are called epochs and represent persisted
 (durable) transactions from the IOD layer. Each of these offers different
 functionality, but are connected as is explained below. How these differ from
-the \DDT approach is also explored. While they are seemingly very different,
-they use a very similar approach to solve the same problem.
+the \DDT approach is also explored. While IOD's and \DDTns's transactions are
+seemingly very different, they use a similar high-level design, but very
+different implementation, to solve the same problem.
 
 \subsection{IOD Transactions}
 To understand how transactions are used in the IOD layer, some terminology and
@@ -282,9 +293,9 @@ committed.
 The Epoch mechanism differs from transactions. Instead of focusing on when a
 particular output is complete, an epoch represents incremental persisted copies
 of a container. To simplify the mapping between an IOD transaction and the DAOS
-epochs, the IOD transaction ID is the same as the epoch ID. The key difference
-is that at the DAOS layer, some transaction (epoch) IDs will not be
-represented.
+epochs, when an IOD transaction is persisted to DAOS, the IOD transaction ID is
+the used as the epoch ID. The key difference is that at the DAOS layer, some
+transaction (epoch) IDs will not be represented.
 
 \subsection{Metadata Management}
 While a central design goal of the Fast Forward project to eliminate the
@@ -322,7 +333,7 @@ instead. Further, given the ability to re-stripe in the IOD layer, the list is
 not a list of objects completely included in the IOD object, but instead
 objects from which part of the data came from some listed DAOS object.  Third,
 sharding IOD objects makes sense based on the compute process connection a
-shard has with the complete object. Striping of an IOD object makes sense in
+shard has with the complete object.  Striping of an IOD object makes sense in
 connection with the DAOS object(s) underneath, but striping within the IOD
 layer is not discussed. Further, using striping from clients into the IOD layer
 introduces a level of coordination that IOD seeks to avoid.  Fourth, given the
@@ -330,11 +341,11 @@ previous items, there is ambiguity with the maximum valid offset of the object.
 This could be for the shard or for the collection of shard objects that
 represent a distributed variable. Ideally, either a robust metadata management
 system should be incorporated into the system, preferably separate from the IOD
-layer. Alternatively, all of this functionality should be left to the user
-layer. The only potential challenge is determining the container for a file
-open command and what the transaction ID should be. This limited operation
-should be a straightforward search using a hash or similar fast mechanism for
-examining a list of container names and/or object IDs.
+layer or all of this functionality should be left to the user layer. The only
+potential challenge is determining the container for a file open command and
+what the transaction ID should be. This limited operation should be a
+straightforward search using a hash or similar fast mechanism for examining a
+list of container names and/or object IDs.
 
 The \DDT project created a simplistic model for a metadata service that has
 different features. It is described below and has been published
@@ -360,6 +371,8 @@ service that users must interact with if they need those services. Otherwise,
 it is 100\% out of the way. Users can manage everything by maintaining the
 metadata including the list of objects themselves. However, there are drawbacks
 to this 100\% client-side approach.
+
+NEED TO ENUMERATE SOME OF THE CLIENT-SIDE ONLY PROBLEMS
 
 For the IOD proposal, the service needs some adjustments to be generally
 useful.  First, there needs to be a way to query the list of available
@@ -463,6 +476,8 @@ recover and clean up the incomplete transactions. IOD's transactions are
 asynchronous precluding a relatively simple, short timeout value to detect
 failures. Unfortunately, at this point, there is no mechanism in IOD's
 transaction handling to detect a fault and clean up any incomplete operations.
+While this is intended for phase 2, some initial suggestion on how this might
+be handled would give some confidence that the asynchronous approach is viable.
 
 Second, should a transaction on a container not complete, all subsequent
 transactions on that container, even if they are complete and correct, will not
@@ -474,7 +489,7 @@ be made available because the transaction is still listed as in progress. The
 problem is that without a way to clean up this failed transaction, no newer
 versions of the same container can be made readable. In reality, the single
 leader model would ideally outsource the transaction processing to something
-like \DDT on the client side.
+like \DDT on the client side. This does not address the failure case though.
 
 Fourth, in the multi-leader model, using a count of client connections to
 determine if transaction is complete is problematic.  First, should this be in
@@ -514,12 +529,23 @@ are illustrated in Figure~\ref{fig:optimized-protocol}.  Sub-transactions
 represent finer grained operations than the entire output, \DDT can manage
 multiple writes per client by using a sub-transaction to represent the output
 for any item to the file (container). Because of how the sub-transactions are
-managed, the singleton sub-transactions must be declared before the transaction
-begins ensuring there is global knowledge that the sub-transaction is expected.
-That way if the coordinator (transaction leader) fails, which ever process
-takes over that role knows to expect a completion message for that
-sub-transaction or the overall transaction cannot complete. While this
-additional layer does introduce messaging, the overhead is quite small.
+managed, the singleton sub-transactions, ones in which only a single process
+participates, must be declared before the transaction begins so that its
+existence can be broadcast as part of the begin transaction message. This
+ensures there is global knowledge that the sub-transaction is expected.  That
+way if the coordinator (transaction leader) fails, which ever process takes
+over that role knows to expect a completion message for that sub-transaction or
+the overall transaction cannot complete. Global sub-transactions can be defined
+at any time since they are a global, synchronized operation broadcasting their
+existence. While this additional layer does introduce messaging, the overhead
+is quite small.
+
+The advantages of eliminating these messages is not performance as demonstrated
+by the performance of \DDTns. Instead, it offers a much less synchronous model
+that matches with different programming models, such as Charm++ or other
+task-based approaches. Since it can work for the bulk-synchronous model also,
+it is a more broadly applicable approach. This assumes that the observed
+potential issues can be addressed successfully.
 
 \subsection{Comparision to Other Protocols}
 Alternatives, such as Paxos~\cite{Lamport:1998:paxos} algorithms like
@@ -534,8 +560,6 @@ support, we need guarantees of when a consistent state has been achieved.
 Second, these systems also all assume that updates are initiated from a single
 client process rather than a parallel set of processes as is the standard in
 HPC environments.
-
-As an alternative, a scalable locking service like Chubby~\cite{burrows:2006:chubby} might be employed.
 
 \DDT uses a second layer of coordination on the client side that greatly
 increases the scalability by consolidating messages from clients into unique
@@ -584,6 +608,8 @@ bottlenecks and potential scalability issues.
 \section{Broader Design}
 \label{sec:summary}
 
+THiS SECTION NEEDS SOME HELP
+
 Consider a shared file system across an HPC data center. The current design
 maintains the metadata in the IOD layer localized to a single machine
 effectively making the data inaccessible from another platform.
@@ -596,7 +622,7 @@ same names with locally correct, globally conflicting definitions serves to
 confuse how the system should work.
 
 \section{Conclusions}
-\label{lab:conclusion}
+\label{sec:conclusion}
 
 The Fast Forward Storage and IO Stack project has designed a good first pass at
 addressing the requirements for an extreme scale data storage mechanism. The
@@ -609,10 +635,9 @@ IOD functionality, this concept represents the concensus approach for what will
 be required.
 
 The partial metadata management incorporated into the IOD layer and the lack of
-consideration for how to handle and recover from failures are glaring
-oversights in the current documents. It is our undertanding that these will be
-addressed in the next phase and we hope to help inform that effort with our
-experiences.
+consideration for how to handle and recover from failures are oversights in the
+current documents. It is our undertanding that these will be addressed in the
+next phase and we hope to help inform that effort with our experiences.
 
 We hope that the efforts made in the \DDT project and other efforts to explore
 the requirements for this space, along with the analysis presented in this
@@ -631,173 +656,5 @@ Administration under contract DE-AC04-94AL85000.
 \bibliography{paper}
 
 \vfill\eject
-
-\newpage
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%\begin{figure}[ht]
-%\vspace{-0.15in}
-%\centering
-%\includegraphics[keepaspectratio=true, width=0.9\columnwidth]{images/hierarchy}
-%\vspace{-0.15in}
-%\caption{Example Hierarchy}
-%\label{fig:hierarchy}
-%\vspace{-0.15in}
-%\end{figure}
-
-%\begin{figure}[ht]
-%\centering
-%\includegraphics[keepaspectratio=true, width=0.9\columnwidth]{images/stagingmodel}
-%\vspace{-0.15in}
-%\caption{Staging Model}
-%\label{fig:staging-model}
-%\vspace{-0.15in}
-%\end{figure}
-
-%\section{New Protocol Design}
-%\label{lab:design}
-
-%To summarize the semantics of \DDT for those unfamiliar with it, consider the
-%following. Since we have parallel clients and servers (MxN), it is necessary to
-%have a mechanism to manage each single operation by a collection of clients 
-%with a collection of servers to ensure that it is completed correctly. We must
-%also have a way to manage the set of these operations as a single, atomic
-%action. The difficulty with this scenario is the need to maintain global
-%knowledge across all of the clients and servers. This global knowledge allows
-%decisions across all clients. In a traditional distributed transaction, the
-%single client always knows the state reported by all of the ``server''
-%resources used. When the client is split into multiple pieces, each piece
-%ultimately needs to have the same knowledge, including any knowledge that might
-%be local only. If this does not happen, no guarantees can be made. The message
-%count explosion implied by this level of knowledge is daunting and what
-%prompted this project. Adding complexity for data movement operations is that
-%a typical data set will contain multiple globally distributed variables that
-%each must be treated as an atomic unit.
-
-%To accommodate these requirements, we have the concept of a transaction
-%representing the total set of operations and the sub-transaction representing a
-%single operation. Each sub-transaction can represent either a single process
-%performing an action (singleton) or all of the parallel clients participating
-%in a single action (global). In either case, each sub-transaction is managed as
-%part of the overall transaction. Voting and commit operations are performed
-%both at the sub-transaction level and at the transaction level. With the
-%re-implementation of the protocol, these semantics have not changed.
-
-%\section{Evaluation}
-%\label{lab:evaluation}
-
-%To evaluate the scalability and performance of \DDTns, tests are performed on
-%Cielo at Sandia National Laboratories. Cielo is a Cray XE6 platform with 8,944
-%nodes each containing dual, eight core AMD Opteron 6136 processors and 32 GB of
-%RAM. It uses the Cray Gemini network in a 3D torus and uses the Cray Linux
-%Environment. Tests are performed at powers of two scale from 256 up to 65536
-%processes. We use two pairs of datastore and metadata services along side the
-%process counts mentioned here. Each of these other services is given a single
-%node on which to operate.
-
-%The represented IAW consists of a writing application creating ten 3-D
-%variables. Each of these variables is distributed across all of the processes
-%with each process containing a 32x32x32 double precision floating point number
-%chunk for each variable. The total space is scaled by doubling each dimension
-%keeping the total dimensions as close to square as is possible. All ten of
-%these variables and the corresponding chunks are written to the first pair of
-%datastore and metadata servers. Then, an update application marks one variable
-%as ``in process'' in the first metadata service, reads the chunks in parallel
-%from the first datastore service, updates the data, creates a new variable in a
-%second metadata service inserting the updated data into the second datastore
-%service, and then deletes the original variable from the first datastore and
-%metadata services. For the purposes of this evaluation, only the overhead
-%incurred by the transaction protocol is reported.  No attempts were made to
-%make the datastore and metadata service efficient and including those
-%performance results would obfuscate the impact of having transactions surround
-%data movement applications. The overheads are measured during the update
-%application's activities and represent the green and blue arrows within
-%Figure~\ref{fig:optimized-protocol}.
-
-%With the three-tier structure employed by \DDTns, we choose to always employ at
-%least two sub-coordinators, even at small scale, to incur higher overhead
-%costs.  An example of this configuration is shown in
-%Figure~\ref{fig:hierarchy}.  In this case, process 0 acts as the coordinator,
-%sub-coordinator, and a subordinate. Process 3 acts as a sub-coordinator and a
-%subordinate. The rest of the processes operate solely as subordinates. The
-%configuration for each run consists of a minimum of 2 sub-coordinators and a
-%maximum of 256 subordinates per sub-coordinator. That yields 256
-%sub-coordinators each with 256 subordinates at 65536 processes. This is
-%illustrated in Table~\ref{tab:scaling} showing the various scales evaluated and
-%the configuration for each.  Other tests of smaller numbers of processes were
-%run, but were omitted because they did not add any additional information to
-%the results.
-
-%The test values reported include the following actions:
-
-%\begin{enumerate}
-%\item txn\_create\_transaction - create a new transaction
-%\item txn\_create\_sub\_transaction - create a new singleton sub-transaction
-%\item txn\_create\_sub\_transaction\_all - called three times to create three global sub-transactions
-%\item txn\_begin\_transaction - start the transaction processing
-%\item txn\_commit\_sub\_transaction - called four times total to commit the four sub-transactions
-%\item txn\_vote\_transaction - vote to commit or abort the overall transaction
-%\item txn\_commit\_transaction - commit the entire transaction
-%\item txn\_finalize\_txn - clean up any transaction specific memory or perform any final operations
-%\end{enumerate}
-
-%All operations except txn\_create\_sub\_transaction and \\
-%txn\_commit\_sub\_transaction are performed as effectively collective
-%operations. These two exceptions are only performed by the single process
-%involved. In order for the existence of this singleton sub-transaction to be
-%guaranteed to be known, we split the create and begin operations to provide a
-%timeframe during which all singleton sub-transactions should be initialized.
-%The begin operation gathers knowledge of all of these singleton
-%sub-transactions and broadcasts it to all processes to make failure recovery
-%possible. This step guarantees that every singleton sub-transaction will be
-%known or the begin will fail due to a process failure. Since the global
-%sub-transactions are global operations, they can be done either before or after
-%the begin transaction call. In our case, we have one global sub-transaction
-%created before the begin transaction and two afterwards.
-
-%The selected sequence of operations gives a representative idea of what a
-%typical transaction may include. Each test is performed seven times and the
-%mean value is presented. Given the small magnitude of the values, there is a
-%bit of variance that has a large percentage, but small absolute value. The
-%results are presented in Figure~\ref{fig:performance}. The results for 4096
-%processes were lost.
-
-%In the interest of saving space, only the results for 64K processes is
-%discussed. In all cases, the time spent in operations for the 64K case are the
-%longest of all cases tested. At a detailed level, the time for the 64K
-%processes case can be itemized as follows. First, the slowest operation, by
-%far, is the txn\_create\_sub\_transaction\_all with a maximum time of 0.0310
-%seconds for one of the calls. The mean time is 0.01 seconds. Second, the other
-%operations are all at less than 0.005 seconds on average and a maximum of 0.012
-%seconds.  Third, the time for the initialization and cleanup of the total
-%protocol, the calls equivalent to MPI\_Init and MPI\_Finalize, take 0.38
-%seconds total. Since the txn\_init call is the first call that uses MPI in the
-%system and that it is a full order of magnitude slower than any other operation
-%at worst, we believe there is MPI initial communication channel setup being
-%established accounting for the extra time. The txn\_finalize takes a maximum of
-%0.0002 seconds.  Since these calls are done once for the entire application
-%lifetime, we did not include them in the results since they are not part of the
-%typical transaction cost that would be incurred for each transactional
-%operation.
-
-%\section {Discussion}
-%\label{lab:discussion}
-%The leading alternative to \DDT is the Intel/Lustre FastForward Epoch
-%approach~\cite{barton:2013:fastforward,lombardi:2013:epochs}.  While \DDT is
-%intended for a general purposes, epochs are designed specifically to address
-%the needs of a shared storage array with a large number of parallel clients.
-%The general idea is to mark every operation with a transaction id, record a
-%process count somewhere to allow reconciliation later, and have every process
-%operate independently for the duration of the writing operation. A second, more
-%synchronous mode is also available. In this synchronous mode, the user is
-%required to manage the transaction ID and to update the transaction state in
-%the storage servers. During a read process, it must be determined what is the
-%most current, complete, ``Readable'' version of the file.  This entails
-%contacting all of the storage devices to determine all of the versions of
-%blocks stored on each device. With that information, it can be determined which
-%of these transactions is ``Readable''. While this reconciliation operation may
-%happen asynchronously, it must be done before a read operation potentially
-%prompting it to be triggered by a client call or potentially stale data is
-%presented as the most current.
 
 \end{document}
