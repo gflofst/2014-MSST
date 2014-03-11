@@ -38,7 +38,7 @@
 \clubpenalty=10000
 \widowpenalty = 10000
 
-\title{Considerations for the Next Iteration of the DOE Fast Forward Storage and IO Project}
+\title{Consistency and Fault Tolerance Considerations for the Next Iteration of the DOE Fast Forward Storage and IO Project}
 
 \numberofauthors{3}
 \author{
@@ -58,12 +58,12 @@
 \begin{abstract}
 With phase 1 of the Fast Forward Storage and IO Stack project complete, it is
 an excellent opportunity to evaluate many of the decisions made to feed into
-the phase 2 effort. The initial effort to define a next generation filesystem
+the phase 2 effort. The initial effort to define a next generation file system
 has made admirable contributions in architecture and design. Formalizing the
 general idea of data staging as burst buffers for the file system will help
 manage the performance variability and offer the data processing opportunities
-outside the main compute and file system. Adding a tranasctional mechanism to
-manage faults and data visilibilty helps enable effective analytics without
+outside the main compute and file system. Adding a transactional mechanism to
+manage faults and data visibility helps enable effective analytics without
 having to work around the IO stack semantics.
 
 While these and other their contributions are valuable, similar efforts made
@@ -114,18 +114,18 @@ is the only way to reach the persistent storage array in lower layers.
 
 The core idea for IOD is to provide a way to manage the IO load that is
 separate from the compute nodes and the storage array. Communication intensive
-acitivies, such as two-phase, data sieving IO's data rearrangement process, can
-be moved to the IOD layer offloading the communication load from the compute
-nodes. IOD has three main purposes. First, if the optional burst buffer is
-availble, it works as a fast cache absorbing write write operations for the
+activities, such as two-phase, data sieving IO's data rearrangement process,
+can be moved to the IOD layer offloading the communication load from the
+compute nodes. IOD has three main purposes. First, if the optional burst buffer
+is available, it works as a fast cache absorbing write operations for the
 slower trickle out to the central storage array. It can also be used to
 retrieve objects from the central storage array for more efficient read
 operations and offer data filtering to make client reads more efficient.
 Second, it offers the transaction mechanism for controlling data set visibility
-and to manage faults that should prevent a data set from being used. Third,
-data processing operations can be placed in the IOD. This operations are
-inteded to offer data rearrangement, filtering, and similar operations prior to
-it reaching the central storage array.
+and to manage faults that would prevent a data set from being used. Third, data
+processing operations can be placed in the IOD. These operations are intended
+to offer data rearrangement, filtering, and similar operations prior to it
+reaching the central storage array.
 
 Offloading the collective two-phase data sieving from the compute nodes to
 reorganize data has proven effective at reducing the total time for writing
@@ -144,7 +144,7 @@ features explored in this paper all have a strong presence in the IOD layer
 motivating the focus of this examination.
 
 %Incorporated into the design of these layers and the function of some of these
-%layers themsleves, such as the IOD layer, are features to manage both burst IO
+%layers themselves, such as the IOD layer, are features to manage both burst IO
 %performance and faults. In particular, the IOD layer's use of burst buffers
 %attempts to absorb a massive data dump from the compute area that is then
 %trickled to the persistent storage area only if desired. Otherwise, it can be
@@ -161,19 +161,16 @@ motivating the focus of this examination.
 %output operations, they are key features.
 
 The rest of the paper is organized as follows. Section~\ref{sec:burst}
-discusses some of the features of incoporating burst buffers as designed and
+discusses some of the features of incorporating burst buffers as designed and
 suggests some considerations and alternatives for the next generation of this
 project. Section~\ref{sec:transactions} discusses the transactions approach
 offered in the IOD layer and the corresponding epochs in the DAOS layer. It
 also offers a comparison to the \DDT system given the very similar high-level
-design and motivating use case.  Section~\ref{sec:optimizations} discusses some
-of the optimizations offered by the current design and how and when these
-optimizations will work best. It also explores some of the dark corners that
-may yield performance issues with the current design. 
-Section~\ref{sec:summary} disucsses the system overall with recommendations on
-what design elements should be considered based on broader issues with current
-HPC data centers. The paper is conclued in Section~\ref{sec:conclusion} with
-a summary of the broad issues covered in the paper.
+design and motivating use case.  Section~\ref{sec:summary} discusses the system
+overall with recommendations on what design elements should be considered based
+on broader issues with current HPC data centers. The paper is concluded in
+Section~\ref{sec:conclusion} with a summary of the broad issues covered in the
+paper.
 
 \section{Burst Buffers}
 \label{sec:burst}
@@ -203,16 +200,25 @@ and doing things like changing the fast array dimension.
 One of the bigger concerns is the observation that the original data staging
 proposals all used compute nodes while the newer proposals seek not only to
 make them a fixed portion of the IO stack, but also shared across all machine
-users. The PreDatA paper in particular examines the potential costs and
-advantages of where to place operators similar to the IOD proposed function
-shipping. There are two key takeaways from that work. First, placement matters.
-Depending on the communication intensity vs. computation intensity, where
-along the IO path to place the operation can matter significantly. Second, and
-more importantly, the amount of time spent processing for the operators was
-stretched to the point where it consumed nearly all of the time between IO
-operations. The given ratios of compute processes to staging process examined
-is representative for future extreme scale platforms. If anything, the ratios
-offer more staging processes than IOD processes would be available.
+users. The PreDatA~\cite{zheng:2010:predata} paper in particular examines the
+potential costs and advantages of where to place operators similar to the IOD
+proposed function shipping. There are two key takeaways from that work. First,
+placement matters.  Depending on the communication intensity vs. computation
+intensity, where along the IO path to place the operation can matter
+significantly. Second, and more importantly, the amount of time spent
+processing for the operators was stretched to the point where it consumed
+nearly all of the time between IO operations. The given ratios of compute
+processes to staging process examined is representative for future extreme
+scale platforms. If anything, the ratios offer more staging processes than IOD
+processes would be available.
+
+In the case of the IOD design, it forces a staging area deployment and then
+shares the staging area across all users simultaneously. This is unlikely to be
+useful because of the limited compute and communication capacity to spare to
+perform these operations at a bottleneck in the IO path. The use of a separate
+data staging area intentionally separate from the IO path allows using
+operators on limited resources leaving the IO path clear for strictly data
+movement.
 
 By concentrating this functionality into the storage stack, three problems
 arise.  First, the amount of network bandwidth, IO bandwidth, and compute power
@@ -222,7 +228,7 @@ is used instead, the functionality risks being too small to be useful. Third,
 the hardware performance advantage for SSDs is questionable. Current NAND-based
 flash devices top out at around 400 MB/sec. The key spec that is missing from
 this number is that 400 MB/sec is a measure of the fixed number of available
-IOPS multipled by the block size. This represents the ideal streaming
+IOPS multiplied by the block size. This represents the ideal streaming
 performance possible. The problem is that it costs an IOP to read 1 byte or 1
 block (4KB or 8KB, depending on the device). It costs 1 IOP to write a full
 block--usually. In some cases, it will cost 2 IOPs.  This accounts for the
@@ -238,7 +244,7 @@ them from use in an extreme scale platform.
 
 Given these features, the optionality and even incorporation of burst buffers
 in the current design should be carefully considered. Much of the advanced, key
-functionality proposed as they are currently designed ultimatey relies on the
+functionality proposed as they are currently designed ultimately relies on the
 existence of burst buffers to work. Further thought about how to have an IOD
 layer both with and without a burst buffer is required before they can be
 considered optional. As the design stands today, they are a required part of
@@ -268,14 +274,14 @@ The three initially defined object types are key-value store, array shard,
 and blob. The easiest way to understand these types is to evaluate these from
 the perspective of an HDF-5 file, the initial user interface layer. The
 key-value store represents a collection of attributes. The array shard
-represents part of a potentially multi-dimensional array. It is refered to as a
-shard because it is likely a small piece of a globally defined array. The blob
-represents a byte stream of arbitrary contents.  The fundamental difference
-between an array shard and a blob is that the array shard has metadata
-identifying its portion within the global, logical space while the blob is
-simply a 1-dimensional array of bytes that is not shared across IOD nodes.
-Should an operation be deployed into IOD to manipulate an array within a
-container, it would operate on the array shards rather than on blobs. Given
+represents part of a potentially multi-dimensional array. It is referred to as
+a shard because it is likely a small piece of a globally defined array. The
+blob represents a byte stream of arbitrary contents.  The fundamental
+difference between an array shard and a blob is that the array shard has
+metadata identifying its portion within the global, logical space while the
+blob is simply a 1-dimensional array of bytes that is not shared across IOD
+nodes.  Should an operation be deployed into IOD to manipulate an array within
+a container, it would operate on the array shards rather than on blobs. Given
 this context, the transactions come in two forms.
 
 First is a single leader transaction where the IOD manages based on calls from
@@ -299,7 +305,7 @@ transaction (epoch) IDs will not be represented.
 
 \subsection{Metadata Management}
 While a central design goal of the Fast Forward project to eliminate the
-requireent for a metadata server as a core component, it was not fully
+requirement for a metadata server as a core component, it was not fully
 accomplished.  This idea is not new and has been explored as part of the Light
 Weight File Systems project~\cite{oldfield:lwfs}. In LWFS, the metadata service
 is explicitly limited to a user task with the storage layer limited to data
@@ -309,7 +315,7 @@ not completely accomplished.
 
 The purpose behind the goal is to eliminate the serialized bottleneck caused by
 having a centralized metadata service. Much of the design of IOD with objects
-and continers does work to eliminate these bottlenecks.  However, IOD does not
+and containers does work to eliminate these bottlenecks.  However, IOD does not
 go fully to a no metadata service model. Instead, the IOD layer describes a
 key-value metadata service it provides. This service maintains four different
 items:
@@ -323,8 +329,8 @@ items:
 
 While a pure no metadata model would be ideal for performance, this current
 proposal has a few challenges. By providing this basic functionality, metadata
-management is split between the user layer and the IOD layer. Consdier the
-following items. First, there are no list of containers. This is closer to the
+management is split between the user layer and the IOD layer. Consider the
+following items. First, there is no list of containers. This is closer to the
 no metadata ideal, but given the rest of the functionality, it exports to the
 user level a requirement to track what containers are in the file system.
 Second, given the flattening that occurs between IOD and DAOS, the mapping from
@@ -356,7 +362,7 @@ system to examine \DDT performance, we did not put the effort into a making it
 a robust system. While it does not address having a file equivalence like the
 container concept, it does introduce a way to figure out what is available.
 Stored along with this object description is a list of the global dimensions
-for array objects. One observtion made as part of creating this service is that
+for array objects. One observation made as part of creating this service is that
 this is insufficient for many engineering codes that use non-regular meshes.
 Second, for each object, a list of the equivalent to shards are kept with a
 link back to the master object and the offset and size for each dimension for
@@ -372,7 +378,30 @@ it is 100\% out of the way. Users can manage everything by maintaining the
 metadata including the list of objects themselves. However, there are drawbacks
 to this 100\% client-side approach.
 
-NEED TO ENUMERATE SOME OF THE CLIENT-SIDE ONLY PROBLEMS
+With a client-side only approach, there is a serious risk of the metadata
+service and the object store getting out of sync.  While having a metadata-less
+object storage service is desirable, the different semantics from traditional
+file systems requires some considerations. In this case, should these services
+get out of sync, three particular risks introduced.  First, a client could
+create an entry in the metadata service that does not correspond to any objects
+in the object store. Second, a client could create objects that have no
+associated metadata entries. Third, updates to the metadata or object store
+service should be an atomic operation, but due to a lack of coordination, a
+window where the system is inconsistent appears.  Ultimately, the consistency
+semantics required must be determined. If a metadata service is required and it
+must be in sync with the object storage service, then additional work must be
+performed. In traditional file systems, the metadata and object storage updates
+are atomic. With decoupling metadata from object storage, should this atomicity
+still be desired, it requires both the ability for the services to participate
+in a task that is part of a larger atomic operation and a higher-level
+mechanism to manage the atomic operation. Overall, while additional work is
+required to maintain a client-side only metadata service, eliminating any
+potential bottlenecks related to updating metadata related to the object
+storage are eliminated. The burden of tracking striping and other metadata that
+has traditionally been part of the metadata associated with the file system
+will have to be maintained by the object storage service. The lack of a
+centralized, serialized bottleneck to store that information improves
+concurrency.
 
 For the IOD proposal, the service needs some adjustments to be generally
 useful.  First, there needs to be a way to query the list of available
@@ -408,7 +437,7 @@ example services. In the case of \DDTns, the functionality is more minimal, but
 also avoids some of the concerns outlined below.
 
 The second iteration of the protocol~\cite{lofstead:2013:pdsw-txn} fixed
-scalability issues and demonstrated a scalable client-side coordiation model
+scalability issues and demonstrated a scalable client-side coordination model
 with excellent performance. The performance measured for a complex transaction
 with \DDT is illustrated in Figure~\ref{fig:performance}. This performance is
 explored in detail in a previous paper~\cite{lofstead:2013:pdsw-txn}. The
@@ -459,13 +488,13 @@ Processes & \vtop{\hbox{\strut Number of}\hbox{\strut Sub-Coordinators}} & \vtop
     \label{tab:scaling}
 \end{table}
 
-At a a high level, both \DDT and the IOD transactions have the same high-level
+At a high level, both \DDT and the IOD transactions have the same high-level
 design. In both cases, a hierarchical model is employed. In the case of \DDTns,
 it is a purely client-side tree using semi-synchronous messaging. The messaging
 itself, in the current implementation, uses asynchronous MPI messages. The
 synchronous component comes from the timeout mechanism used to detect faults.
-It forces a level of coordiation and synchronization for the protocol. For IOD,
-it is a server-side tree and fully asynchronous. In both cases, there is a
+It forces a level of coordination and synchronization for the protocol. For
+IOD, it is a server-side tree and fully asynchronous. In both cases, there is a
 master in charge of managing the transaction and a collection of workers that
 aggregate into the master through second-level leaders. Beyond that, there are
 some significant differences. Some of the different choices made by IOD raise
@@ -493,7 +522,7 @@ like \DDT on the client side. This does not address the failure case though.
 
 Fourth, in the multi-leader model, using a count of client connections to
 determine if transaction is complete is problematic.  First, should this be in
-an evnironment where lost or repeated network messages are possible, then the
+an environment where lost or repeated network messages are possible, then the
 count could be wrong inappropriately. This is a general problem and unlikely
 in the current environment, but is a concern on less integrated platforms.
 The idea of a count precludes any tracking of expected messages from sources
@@ -547,7 +576,7 @@ task-based approaches. Since it can work for the bulk-synchronous model also,
 it is a more broadly applicable approach. This assumes that the observed
 potential issues can be addressed successfully.
 
-\subsection{Comparision to Other Protocols}
+\subsection{Comparison to Other Protocols}
 Alternatives, such as Paxos~\cite{Lamport:1998:paxos} algorithms like
 ZooKeeper~\cite{Hunt:2010:zookeeper}, suffer from two limitations making them
 unsuitable for this environment. First, the distributed servers in Paxos
@@ -583,43 +612,26 @@ work as something that should be considered hand-in-hand with a transaction
 approach to ensure the integrity of the movement of the data in addition to the
 agreement of processes about the successful completion of a parallel operation.
 
-\section{Optimizations}
-\label{sec:optimizations}
-
-THIS MUST BE RECONCILED WITH THE EARLIER TEXT THAT SAYS LARGELY THE SAME THING.
-
-The ability to place functionality at the IOD layer was explored earlier. In
-particular, PreDatA~\cite{zheng:2010:predata} demonstrated the advantage to
-the approach as well as identified that the placement of the operators should
-consider the compute nodes, the staging or burst buffer nodes, or offline
-depending on the characteristics of the operation. This consideration should
-be incorporated into the design. In particular, one of the key observations
-is that the reduced process count may require the entire time between output
-operations to perform many of the data processing tasks requested. This was
-part of the motivation prompting evaluating placement decisions at the compute
-node, in a staging area, or offline. In the case of the IOD design, it forces
-a staging area deployment and then shares that staging area across all users
-simultaneously. This is unlikely to be useful because of the limited compute
-and communication capacity to spare to perform these operations at a bottleneck
-in the IO path. The use of a separate staging area to perform these computations
-intentionally selects a location separate from the IO path to avoid these
-bottlenecks and potential scalability issues.
-
 \section{Broader Design}
 \label{sec:summary}
 
-THiS SECTION NEEDS SOME HELP
-
 Consider a shared file system across an HPC data center. The current design
 maintains the metadata in the IOD layer localized to a single machine
-effectively making the data inaccessible from another platform.
+effectively making the data inaccessible from another platform. This requires
+either the IOD layer be shared across machines, something clearly beyond the
+design scope, or that an additional metadata service that extends the minimal
+metadata service provided in the IOD layer. This higher level metadata service
+would be required to be reachable from any machine that shares the file system.
+As explained above, having this client-side only metadata service introduces
+additional functionality requirements.
 
-There is a change in definitions between the IOD layer and the DAOS layer.
-For the IOD layer, a container is a collection of objects. For the DAOS layer,
-a continer is a collection of shards. For the IOD an object may be a shard of
-a global array. For DAOS, a shard can host a set of DAOS objects. Having the
-same names with locally correct, globally conflicting definitions serves to
-confuse how the system should work.
+A point of confusion rather than a potential design challenge is the change in
+definitions between the IOD layer and the DAOS layer.  For the IOD layer, a
+container is a collection of objects. For the DAOS layer, a container is a
+collection of shards. For the IOD an object may be a shard of a global array.
+For DAOS, a shard can host a set of DAOS objects. Having the same names with
+locally correct, globally conflicting definitions serves to confuse how the
+system should work.
 
 \section{Conclusions}
 \label{sec:conclusion}
@@ -631,17 +643,18 @@ intermediate data without requiring the overhead of writing to persistent
 storage. The envisioned transaction mechanism, while not perfect in the current
 form, is another good attempt to address both failures and prevent access to
 incomplete or incorrect data by downstream data consumers. Integrated with the
-IOD functionality, this concept represents the concensus approach for what will
+IOD functionality, this concept represents the consensus approach for what will
 be required.
 
 The partial metadata management incorporated into the IOD layer and the lack of
 consideration for how to handle and recover from failures are oversights in the
-current documents. It is our undertanding that these will be addressed in the
+current documents. It is our understanding that these will be addressed in the
 next phase and we hope to help inform that effort with our experiences.
 
-We hope that the efforts made in the \DDT project and other efforts to explore
-the requirements for this space, along with the analysis presented in this
-paper will prove useful for the next phase of the Fast Forward project.
+We hope that the efforts made in the \DDTns, Lightweight File Systems, and
+other efforts to explore the requirements for this space, along with the
+analysis presented in this paper will prove useful for the next phase of the
+Fast Forward project.
 
 \section{Acknowledgements}
 \includegraphics[scale=0.07]{logos/doe_logo}
