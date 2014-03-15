@@ -95,12 +95,22 @@ and performance to adequately serve the needs of an extreme scale platform. To
 address these limitations, the US Department of Energy commissioned an effort
 to develop a design and prototype for an IO stack suitable for the extreme
 scale environment. This is a joint effort led by the Intel Lustre team, Los
-Alamos National Laboratory, EMC, and the HDF Group. This team has developed a
-specification set~\cite{fastforward:2014:docs} for a future IO stack to address
-the identified challenges. The first phase recently completed with a second
-phase getting underway. The core focus of the first phase was basic
-functionality and design. The second phase will refine this design
+Alamos National Laboratory, EMC, DDN, and the HDF Group. This team has
+developed a specification set~\cite{fastforward:2014:docs} for a future IO
+stack to address the identified challenges. The first phase recently completed
+with a second phase getting underway. The core focus of the first phase was
+basic functionality and design. The second phase will refine this design
 incorporating fault recovery and other features missing from the first phase.
+
+The overall design seeks to offer a byte-granular, multi-version concurrency
+control. Through the use of a copy-on-write style mechanism, multiple versions
+of a file can be stored in potentially greatly reduced space. By assuming the
+client interface will be through an IO library affords a more complicated
+interface that offers richer functionality without requiring user code changes.
+By managing data in the IOD layer rather than requring writing to centralized
+storage will better support the performnce requirements of integrated
+application workflows. At a more detailed view, the various layers of the IO
+stack each contribute different functionality and performance implications.
 
 The basic architecture incorporates five layers. The top layer is a high level
 IO library, such as the demonstration HDF-5 library. The intent is to only have
@@ -127,11 +137,13 @@ processing operations can be placed in the IOD. These operations are intended
 to offer data rearrangement, filtering, and similar operations prior to it
 reaching the central storage array.
 
-Offloading the collective two-phase data sieving from the compute nodes to
-reorganize data has proven effective at reducing the total time for writing
-data due to fewer participants involved in the communication
-patterns~\cite{lofstead:2011:nessie-staging}.  Beyond these broad items, there
-are many important details some of which are examined in more detail below.
+While these ideas are not necessarily new, they are new twists on best of class
+efforts for these techologies. For example, offloading the collective two-phase
+data sieving from the compute nodes to reorganize data has proven effective at
+reducing the total time for writing data due to fewer participants involved in
+the communication patterns~\cite{lofstead:2011:nessie-staging}.  Beyond these
+broad items, there are many important details some of which are examined in
+more detail below.
 
 The bottom two layers are the Data Access Object Storage (DAOS) and Versioning
 Object Storage Device (VOSD). DAOS is the typical interface that represents
@@ -143,22 +155,14 @@ has in the performance and functionality of the entire stack. Most of the key
 features explored in this paper all have a strong presence in the IOD layer
 motivating the focus of this examination.
 
-%Incorporated into the design of these layers and the function of some of these
-%layers themselves, such as the IOD layer, are features to manage both burst IO
-%performance and faults. In particular, the IOD layer's use of burst buffers
-%attempts to absorb a massive data dump from the compute area that is then
-%trickled to the persistent storage area only if desired. Otherwise, it can be
-%stored locally on optional SSDs for use by analysis routines eliminating the
-%need to use slower rotational media as the intermediary between a simulation
-%and the analysis code.
-
-%A second feature is the incorporation of a transaction like mechanism into the
-%IOD layer and a related epochs feature into the DAOS layer. This feature offers
-%a mechanism to avoid making incomplete data visible to other users and offer a
-%level of protection if the data can be stored on the optional SSDs. The
-%implications of how these concepts are designed are important to consider for
-%the final design. Because they control data visibility and manage faults for
-%output operations, they are key features.
+Along with the analysis of the published design documents, a discussion of the
+design philosophy representing the overall intent is presented. This informtion
+reprents information that may or moy not have been written down, but is the 
+intent of ultimate product. These insights were gained based on personal
+converations with the team members discussing some of the potential challenges
+with the design as written. These ideas are presented to give a fuller picture
+of where the project is going rather than dwelling on the limitations of the
+published documents.
 
 The rest of the paper is organized as follows. Section~\ref{sec:burst}
 discusses some of the features of incorporating burst buffers as designed and
@@ -178,24 +182,25 @@ paper.
 The idea of burst buffers were initially explored in the context of data
 staging~\cite{abbasi:2007:datatap,Abbasi:2009:datatap,nisar:2008:staging,zheng:2010:predata}.
 These initial designs all use extra compute nodes to represent the data storage
-buffer given the lack of any hardware support for this functionality. The
-desired outcome of these initial studies is to motivate how such functionality
-might be incorporated and the potential benefits.  Later, these concepts were
-proposed to be incorporated as part of the IO
+buffer given the lack of any dedicated hardware support for this functionality.
+The desired outcome of these initial studies is to motivate how such
+functionality might be incorporated and the potential benefits.  Later, these
+concepts were proposed to be incorporated as part of the IO
 stack~\cite{bent:2012:challenges,bent:2012:burst-buffer}.  The current
 FastForward IOD design recommends incorporating SSDs, but specifically lists
 these devices as optional. Unfortunately, both incorporating burst buffers and
 the use of SSDs in the IOD layer may be problematic.  First, with these burst
-buffers being optional, the semantics of how IOD works must change to use DAOS
-to store the data directly rather than storing them locally until explicitly
-persisted by the user. The design of DAOS does not incorporate a high
-transaction rate mechanism. Conversely, it assumes that it will only be
+buffers being optional, the semantics must be clarified of how IOD works must
+change to use DAOS to store the data directly rather than storing them locally
+until explicitly persisted by the user. The design of DAOS does not incorporate
+a high transaction rate mechanism. Conversely, it assumes that it will only be
 involved when persisting a completed transaction and only for a fraction of the
 total transactions created. Further, with function shipping offering the
 ability to change how the data is stored and arranged prior to it being written
 to DAOS, this functionality may also be optional depending on the existence of
-the burst buffer. Consider the important functionality of data rearrangement
-and doing things like changing the fast array dimension.
+the burst buffer or slow the IO path to accommodate the data processing.
+Consider the important functionality of data rearrangement and doing things
+like changing the fast array dimension.
 
 One of the bigger concerns is the observation that the original data staging
 proposals all used compute nodes while the newer proposals seek not only to
@@ -212,11 +217,11 @@ processes to staging process examined is representative for future extreme
 scale platforms. If anything, the ratios offer more staging processes than IOD
 processes would be available.
 
-In the case of the IOD design, it forces a staging area deployment and then
-shares the staging area across all users simultaneously. This is unlikely to be
-useful because of the limited compute and communication capacity to spare to
-perform these operations at a bottleneck in the IO path. The use of a separate
-data staging area intentionally separate from the IO path allows using
+In the case of the written IOD design, it forces a staging area deployment and
+then shares the staging area across all users simultaneously. This is unlikely
+to be useful because of the limited compute and communication capacity to spare
+to perform these operations at a bottleneck in the IO path. The use of a
+separate data staging area intentionally separate from the IO path allows using
 operators on limited resources leaving the IO path clear for strictly data
 movement.
 
@@ -250,6 +255,35 @@ layer both with and without a burst buffer is required before they can be
 considered optional. As the design stands today, they are a required part of
 the IOD layer for proper functioning. Unfortunately, it is not clear that they
 can address the performance concerns they are intended to cover.
+
+\subsection{Design Philosophy}
+The burst buffers design, as presented in the IOD documents, limits the
+placement of the function operators and SSDs for buffers to the IO nodes. The
+team does acknowledge the limitations of this design and intend to ultimately
+focus on spreading the IOD from the IO nodes into the compute area as well.
+This is intended both to help address the limitations of the IO bandwidth
+and compute capaibility of these few nodes for data processing, but also to
+take advantage of new layers in the storage hierarchy. By incorporating NVRAM
+into compute nodes, new options for buffering data prior to being moved to
+centralized storage become available. This lessens the impact of some operators
+while offering additional options for places to store data.
+
+Burst buffers being optional is a high level goal, but not one considered at a
+detailed level with the design. While this forces some serious thought on how
+to adapt the functionality proposed for IOD to work directly on DAOS will have
+to be considered. With the additional desire to support using compute node
+resources for these operations, serious work will be required to make a fully
+functional end-to-end IOD layer implementation for a production system.
+
+Another concern that is acknowledged, but no thought as been applied to is the
+requirement that a single IOD process be the master for any operation. Should
+the number of concurrent applications exceed the available nodes, sharing an
+IOD process will be required. Since partitioning of the IOD processes for
+exclusive use by particular applications is the proposed operating mode, should
+insufficient IOD resources be available, either a job could be delayed or IOD
+resources could be reallocated from a different process could be redeployed for
+use by the new job. These sorts of consideraitons still need to be made for a
+full production system.
 
 \section{Transactions and Epochs}
 \label{sec:transactions}
@@ -295,6 +329,39 @@ is provided to the IOD layer. As clients write to the container, the reference
 count is reduced. Once the count reaches 0, the transaction is automatically
 committed.
 
+\subsubsection{Design Philosophy}
+Undocumented, but inherent in the design of these transactions is how faults
+are detected. The initial design assumes that the current Lustre fault
+detection mechanism that can determine if a process or node is no longer
+reachable is used. This defines how a fault will be detected and what will trigger a passive fault recovery (i.e., transaction abort).
+
+A new term, ``Primary'', is used to define the process(es) that contact the IOD
+layer directly to open a container. Unfortunately, this term is never used nor
+defined within any of the published documents. There are some very positive and
+negative performance implications of this approach. On the positive side, like
+PVFS, it is possible for a single process to open a container and share that
+handle with other processes reducing the load on the IOD layer. The key idea is
+that the single leader vs. multi-leader transaction mode is automatically defined based on the number of Primary processes that open a container. This greatly
+simplifies any additional client-side load in using the different styles of transactions. Also on the positive side, it offers the ability to have a subset of
+processes that are considered transaction participants affording reduced load
+on the IOD processes and more localized transaction management on the client
+side. On the negative side, for a fully IOD managed transaction, ALL processes
+must open the container forcing a potentially immense number of simultaneous
+calls to the IOD layer to open a container. This sort of onslaught is what is
+dealt with on metadata servers today with mass file opens. The reality is that
+this ends up having the same sort of performance implications as distributed
+denial of service attacks on the IOD processes.
+
+Ultimately, with the passive detection of faults for Primaries, the transaction
+mechanism can work very well. A mostly unstated restriction that will be
+relaxed in the next phase is that every sequential transaction on a container
+is considered dependent on the earlier transaction. Should one output be
+delayed and the subsequent five succeed, when the delayed process finally
+fails, all six transactions are rolled back. The thought of using this
+mechanism to store subsequent checkpoint outputs in the same container to both
+save space, but not care if one fails, cannot work in the current form. This
+has been acknowledged and is planned on being relaxed in phase two.
+
 \subsection{DAOS Epochs}
 The Epoch mechanism differs from transactions. Instead of focusing on when a
 particular output is complete, an epoch represents incremental persisted copies
@@ -304,54 +371,38 @@ the used as the epoch ID. The key difference is that at the DAOS layer, some
 transaction (epoch) IDs will not be represented.
 
 \subsection{Metadata Management}
-While a central design goal of the Fast Forward project to eliminate the
-requirement for a metadata server as a core component, it was not fully
-accomplished.  This idea is not new and has been explored as part of the Light
-Weight File Systems project~\cite{oldfield:lwfs}. In LWFS, the metadata service
-is explicitly limited to a user task with the storage layer limited to data
+Eliminating metaata management as a special case and instead treating it just
+as data is a central design goal of the Fast Forward project. Unfortunately,
+it is not completely achieved.
+
+Eliminating metadata as a core component of a file system is not new. It has
+been explored as part of the Light Weight File Systems
+project~\cite{oldfield:lwfs}. In LWFS, the metadata service is explicitly
+limited to a user task with the storage layer limited to data
 storage/retrieval, authorization, and authentication. This approach proved
-workable. For the Fast Forward project, while a similar goal is desired, it is
-not completely accomplished.
+workable. Using this hybrid approach is less common and introduces other
+issues.
 
-The purpose behind the goal is to eliminate the serialized bottleneck caused by
-having a centralized metadata service. Much of the design of IOD with objects
-and containers does work to eliminate these bottlenecks.  However, IOD does not
-go fully to a no metadata service model. Instead, the IOD layer describes a
-key-value metadata service it provides. This service maintains four different
-items:
+IOD and DAOS both share a philosophy that they will have to maintain the
+metadata about how objects are striped and where they are placed. It was
+decided that the additional data to track the namespace as well was a small
+enough additional increment that it was worth maintaining within the system.
 
-\begin{itemize}
-\item The list of IOD objects within the container
-\item The mapping from each IOD object to the corresponding DAOS object.
-\item The sharding and striping of the IOD object
-\item The maximum valid offset of the object
-\end{itemize}
-
-While a pure no metadata model would be ideal for performance, this current
-proposal has a few challenges. By providing this basic functionality, metadata
-management is split between the user layer and the IOD layer. Consider the
-following items. First, there is no list of containers. This is closer to the
-no metadata ideal, but given the rest of the functionality, it exports to the
-user level a requirement to track what containers are in the file system.
-Second, given the flattening that occurs between IOD and DAOS, the mapping from
-IOD objects to DAOS objects is unlikely to be 1-to-1. This is likely a list
-instead. Further, given the ability to re-stripe in the IOD layer, the list is
-not a list of objects completely included in the IOD object, but instead
-objects from which part of the data came from some listed DAOS object.  Third,
-sharding IOD objects makes sense based on the compute process connection a
-shard has with the complete object.  Striping of an IOD object makes sense in
-connection with the DAOS object(s) underneath, but striping within the IOD
-layer is not discussed. Further, using striping from clients into the IOD layer
-introduces a level of coordination that IOD seeks to avoid.  Fourth, given the
-previous items, there is ambiguity with the maximum valid offset of the object.
-This could be for the shard or for the collection of shard objects that
-represent a distributed variable. Ideally, either a robust metadata management
-system should be incorporated into the system, preferably separate from the IOD
-layer or all of this functionality should be left to the user layer. The only
-potential challenge is determining the container for a file open command and
-what the transaction ID should be. This limited operation should be a
-straightforward search using a hash or similar fast mechanism for examining a
-list of container names and/or object IDs.
+\subsubsection{Design Philosophy}
+While the metadata design is not fully defined, there are a few things that
+are intended as part of this. For example, there is a standard, well known
+container that is the system metadata. This includes the list of all other
+containers. This container is treated like any other data in the system and
+striped as appropriate at both the IOD and the DAOS layers. Unfortunately, this
+still couples the metadata to a single object that must serialize access. If
+the metadata, including information about striping and other data layout
+operations were separated completely from the data path, more scalable
+throughput could be achieved. The real challenge of this is introduced by the
+the IOD, DAOS, and VOSD layers. Each of these requires some different metadata
+storage and the migration is transparent to the user. Supporting fully
+independent metadata with this model is difficult, if not impossible. Serious
+thought on how to do this outside the data path effectively should be
+considered for phase two.
 
 The \DDT project created a simplistic model for a metadata service that has
 different features. It is described below and has been published
@@ -402,17 +453,6 @@ has traditionally been part of the metadata associated with the file system
 will have to be maintained by the object storage service. The lack of a
 centralized, serialized bottleneck to store that information improves
 concurrency.
-
-For the IOD proposal, the service needs some adjustments to be generally
-useful.  First, there needs to be a way to query the list of available
-containers. This will support an analysis application using data generated by
-the simulation code. This use case is a stated motivating example for the Fast
-Forward project. Second, the maximum transaction ID for a container is
-mentioned as being maintained by the IOD metadata service, but when and how
-this is done is never mentioned.  Third, the definition of an object needs to
-be made more clear. In some cases, it seems that an object is a globally
-distributed object is represented by a collection of shards. In other cases, it
-is a single shard.
 
 \subsection{Comparison to \DDTns}
 The \DDT project~\cite{lofstead:2012:txn} sought to develop an efficient
@@ -500,27 +540,13 @@ aggregate into the master through second-level leaders. Beyond that, there are
 some significant differences. Some of the different choices made by IOD raise
 some possible concern.
 
-First, \DDT has a timeout mechanism to detect failures and offer an ability to
-recover and clean up the incomplete transactions. IOD's transactions are
-asynchronous precluding a relatively simple, short timeout value to detect
-failures. Unfortunately, at this point, there is no mechanism in IOD's
-transaction handling to detect a fault and clean up any incomplete operations.
-While this is intended for phase 2, some initial suggestion on how this might
-be handled would give some confidence that the asynchronous approach is viable.
-
-Second, should a transaction on a container not complete, all subsequent
+First, should a transaction on a container not complete, all subsequent
 transactions on that container, even if they are complete and correct, will not
-be accessible.
+be accessible. Once the transaction fails, all of these subsequent transactions
+will be aborted. While this is being reconsidered for phase two, it does
+complicate the interface to offer the additional transaction mode.
 
-Third, in the single leader model, if the process that manages the transaction
-were to fail, there is no ability to abort that transaction. The data will not
-be made available because the transaction is still listed as in progress. The
-problem is that without a way to clean up this failed transaction, no newer
-versions of the same container can be made readable. In reality, the single
-leader model would ideally outsource the transaction processing to something
-like \DDT on the client side. This does not address the failure case though.
-
-Fourth, in the multi-leader model, using a count of client connections to
+Second, in the multi-leader model, using a count of client connections to
 determine if transaction is complete is problematic.  First, should this be in
 an environment where lost or repeated network messages are possible, then the
 count could be wrong inappropriately. This is a general problem and unlikely
@@ -615,15 +641,22 @@ agreement of processes about the successful completion of a parallel operation.
 \section{Broader Design}
 \label{sec:summary}
 
-Consider a shared file system across an HPC data center. The current design
-maintains the metadata in the IOD layer localized to a single machine
-effectively making the data inaccessible from another platform. This requires
-either the IOD layer be shared across machines, something clearly beyond the
-design scope, or that an additional metadata service that extends the minimal
-metadata service provided in the IOD layer. This higher level metadata service
-would be required to be reachable from any machine that shares the file system.
-As explained above, having this client-side only metadata service introduces
-additional functionality requirements.
+At a broader level, there are some concerns that were partially clarified
+through conversations with the team.  Consider a shared file system across an
+HPC data center. The current design maintains the metadata in its own
+container. Since copying data from the IOD layer to the DAOS layer requires an
+explicit persist call, how and when synchronizing the metadata across the 
+layers and potentially across machines occurs is undefined. By delaying the
+synchronization until an explicit persist is called will reduce the update
+frequency, it does delay the visibility of data. Ideally, the metadata object
+would need to be automatically persisted every time a container transaction is
+persisted to the DAOS layer.
+
+The implication of this is that every transaction persist is double operation
+to account for the metadata persist. More importantly, the IOD-layer version of
+the metadata container may contain readable transactions that have not been
+persisted to the DAOS layer. How to handle this inconsistency between the two
+layers still needs to be explored.
 
 A point of confusion rather than a potential design challenge is the change in
 definitions between the IOD layer and the DAOS layer.  For the IOD layer, a
