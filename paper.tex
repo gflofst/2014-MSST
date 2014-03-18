@@ -91,15 +91,23 @@ help the next generation design for how the IO stack works as a whole.
 
 Current production HPC IO stack design is unlikely to offer sufficient features
 and performance to adequately serve the needs of an extreme scale platform. To
-address these limitations, the US Department of Energy commissioned an effort
-to develop a design and prototype for an IO stack suitable for the extreme
-scale environment. This is a joint effort led by the Intel Lustre team, Los
-Alamos National Laboratory, EMC, DDN, and the HDF Group. This team has
-developed a specification set~\cite{fastforward:2014:docs} for a future IO
-stack to address the identified challenges. The first phase recently completed
-with a second phase getting underway. The core focus of the first phase was
-basic functionality and design. The second phase will refine this design
-incorporating fault recovery and other features missing from the first phase.
+address these limitations, a joint effort between the US Department of Energy's
+Office of Advanced Simulation and Computing and Advanced Scientific Computing
+Research commissioned an effort to develop a design and prototype for an IO
+stack suitable for the extreme scale environment. This is a joint effort led by
+Lawrence Livermore National Laboratory, with the DOE Data Management Nexus
+leads Rob Ross and Gary Grider as coordinators and contract lead Mark Gary. The
+participating labs are LLNL, SNL, LANL, ORNL, PNL, LBNL, and ANL. Additional
+industrial partners contracted include the Intel Lustre team, EMC, DDN, and the
+HDF Group. This team has developed a specification
+set~\cite{fastforward:2014:docs} for a future IO stack to address the
+identified challenges. The first phase recently completed with a second phase
+getting underway. The core focus of the first phase was basic functionality and
+design. Overriding many of the decisions during this and any subsequent phases
+is the reality of budgets. Placing GBs of NVRAM on every node, while a
+potentially advantageous approach, is not financially feasible. With this in
+mind, the second phase will refine this design incorporating fault recovery and
+other features missing from the first phase.
 
 The overall design seeks to offer a byte-granular, multi-version concurrency
 control. Through the use of a copy-on-write style mechanism, multiple versions
@@ -380,8 +388,8 @@ been explored as part of the Light Weight File Systems
 project~\cite{oldfield:lwfs}. In LWFS, the metadata service is explicitly
 limited to a user task with the storage layer limited to data
 storage/retrieval, authorization, and authentication. This approach proved
-workable. Using this hybrid approach is less common and introduces other
-issues.
+workable. Using this hybrid approach is less common~\cite{weil:2006:ceph} and
+introduces other issues.
 
 IOD and DAOS both share a philosophy that they will have to maintain the
 metadata about how objects are striped and where they are placed. It was
