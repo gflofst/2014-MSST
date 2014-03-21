@@ -65,7 +65,7 @@ outside the main compute and file system. Adding a transactional mechanism to
 manage faults and data visibility helps enable effective analytics without
 having to work around the IO stack semantics.
 
-While these and other their contributions are valuable, similar efforts made
+While these and their other contributions are valuable, similar efforts made
 elsewhere may offer attractive alternatives or differing semantics that could
 yield a more feature rich environment with little to no additional overhead.
 For example, the Doubly Distributed Transactions (\DDTns) protocol offers an
@@ -140,18 +140,17 @@ motivating the focus of this examination.
 
 The core idea for IOD is to provide a way to manage the IO load that is
 separate from the compute nodes and the storage array. Communication intensive
-activities, such as two-phase, data sieving IO's data rearrangement process,
-can be moved to the IOD layer offloading the communication load from the
-compute nodes. IOD has three main purposes. First, if the optional burst buffer
-is available, it works as a fast cache absorbing write operations for the
-slower trickle out to the central storage array. It can also be used to
-retrieve objects from the central storage array for more efficient read
-operations and offer data filtering to make client reads more efficient.
-Second, it offers the transaction mechanism for controlling data set visibility
-and to manage faults that would prevent a data set from being used. Third, data
-processing operations can be placed in the IOD. These operations are intended
-to offer data rearrangement, filtering, and similar operations prior to data
-reaching the central storage array.
+activities, such as data rearrangement, can be moved to the IOD layer
+offloading the communication load from the compute nodes. IOD has three main
+purposes. First, if the optional burst buffer is available, it works as a fast
+cache absorbing write operations for the slower trickle out to the central
+storage array. It can also be used to retrieve objects from the central storage
+array for more efficient read operations and offers data filtering to make
+client reads more efficient.  Second, it offers the transaction mechanism for
+controlling data set visibility and to manage faults that would prevent a data
+set from being used. Third, data processing operations can be placed in the
+IOD. These operations are intended to offer data rearrangement, filtering, and
+similar operations prior to data reaching the central storage array.
 
 While these ideas are not necessarily new, they are new twists on best of class
 efforts for these technologies. For example, offloading the collective
@@ -273,13 +272,15 @@ about SSD performance. This lessens the impact of some operators while offering
 additional options for places to store data.
 
 Burst buffers being optional is a high level goal, but not one considered at a
-detailed level with the design. While this forces some serious thought on how
-to adapt the functionality proposed for IOD to work directly on DAOS will have
-to be considered. With the additional desire to support using compute node
-resources for these operations, serious work will be required to make a fully
-functional end-to-end IOD layer implementation for a production system.
+detailed level with the design. For example, if there is no burst buffer, all
+of the advanced functionality proposed for the IOD layer would have to work
+against the DAOS layer instead. For example, function shipping assumes it will
+operate on fast, local data within the IOD layer rather than against the
+globally shared DAOS layer. With the additional desire to support using compute
+node resources for these operations, serious work will be required to make a
+fully functional end-to-end IOD layer implementation for a production system.
 
-Another concern that is acknowledged, but no thought as been applied to is the
+Another concern that is acknowledged, but no thought has been applied to is the
 requirement that a single IOD process be the master for any operation. Should
 the number of concurrent applications exceed the available nodes, sharing an
 IOD process will be required. Since partitioning of the IOD processes for
@@ -308,19 +309,19 @@ concepts must be explained first. At the coarsest grain level is a container.
 Each container serves to host a transaction and contains a collection of
 objects. Conceptually, containers corresponds to a file in a traditional file
 system. The objects in each container represent different data within a file.
-The three initially defined object types are key-value store, array shard,
-and blob. The easiest way to understand these types is to evaluate these from
-the perspective of an HDF-5 file, the initial user interface layer. The
-key-value store represents a collection of attributes. The array shard
-represents part of a potentially multi-dimensional array. It is referred to as
+The three initially defined object types are key-value store, array, and blob.
+The easiest way to understand these types is to evaluate these from the
+perspective of an HDF-5 file, the initial user interface layer. The key-value
+store represents a collection of attributes or groups. The array represents
+part of a potentially multi-dimensional array. It is referred to as
 a shard because it is likely a small piece of a globally defined array. The
 blob represents a byte stream of arbitrary contents.  The fundamental
-difference between an array shard and a blob is that the array shard has
-metadata identifying its portion within the global, logical space while the
-blob is simply a 1-dimensional array of bytes that is not shared across IOD
-nodes.  Should an operation be deployed into IOD to manipulate an array within
-a container, it would operate on the array shards rather than on blobs. Given
-this context, the transactions come in two forms.
+difference between an array and a blob is that the array has metadata
+identifying its portion within the global, logical space while the blob is
+simply a 1-dimensional array of bytes that is not shared across IOD nodes.
+Should an operation be deployed into IOD to manipulate an array within a
+container, it would operate on the array rather than on blobs. Given this
+context, the transactions come in two forms.
 
 First is a single leader transaction where the IOD manages based on calls from
 a single client. The underlying assumption is that the client side will manage
@@ -329,9 +330,9 @@ reporting to the IOD how to evolve the transaction state.
 
 The second form is called multi-leader and has the IOD layer manage the
 transactions. In this case, when the transaction is created, a count of clients
-is provided to the IOD layer. As clients write to the container, the reference
-count is reduced. Once the count reaches 0, the transaction is automatically
-committed.
+is provided to the IOD layer. As clients commit their changes to the container,
+the reference count is reduced. Once the count reaches 0, the transaction is
+automatically committed.
 
 \subsubsection{Design Philosophy}
 Undocumented, but inherent in the design of these transactions is how faults
@@ -340,35 +341,35 @@ mechanism that can determine if a process or node is no longer reachable. This
 defines how a fault will be detected and what will trigger a passive fault
 recovery (i.e., transaction abort).
 
-A new term, ``Primary'', is used to define the process(es) that contact the IOD
-layer directly to open a container. Unfortunately, this term is never used nor
-defined within any of the published documents. There are some very positive and
-negative performance implications of this approach. On the positive side, like
-PVFS, it is possible for a single process to open a container and share that
-handle with other processes reducing the load on the IOD layer. The key idea is
-that the single leader vs. multi-leader transaction mode is automatically
-defined based on the number of Primary processes that open a container. This
-greatly simplifies any additional client-side load in using the different
-styles of transactions. Also on the positive side, it offers the ability to
-have a subset of processes that are considered transaction participants
-affording reduced load on the IOD processes and more localized transaction
-management on the client side. On the negative side, for a fully IOD managed
-transaction, ALL processes must open the container forcing a potentially
-immense number of simultaneous calls to the IOD layer to open a container. This
-sort of onslaught is what is dealt with on metadata servers today with mass
-file opens. The reality is that this ends up having the same sort of
-performance implications as distributed denial of service attacks on the IOD
-processes.
+The team uses the term ``Primary'' to define the process(es) that contact the
+IOD layer directly to open a container. Unfortunately, this term is never used
+nor defined within any of the published documents. There are some very positive
+and negative performance implications of this approach. On the positive side,
+like PVFS, it is possible for a single process to open a container and share
+that handle with other processes reducing the load on the IOD layer. The key
+idea is that the single leader vs. multi-leader transaction mode is
+automatically defined based on the number of Primary processes that start a
+transaction on a container. This greatly simplifies any additional client-side
+load in using the different styles of transactions. Also on the positive side,
+it offers the ability to have a subset of processes that are considered
+transaction participants affording reduced load on the IOD processes and more
+localized transaction management on the client side. On the negative side, for
+a fully IOD managed transaction, ALL processes must start the transaction on
+the container forcing a potentially immense number of simultaneous calls to the
+IOD layer to open a container. This sort of onslaught is what is dealt with on
+metadata servers today with mass file opens. The reality is that this ends up
+having the same sort of performance implications as distributed denial of
+service attacks on the IOD processes.
 
 Ultimately, with the passive detection of faults for Primaries, the transaction
-mechanism can work very well. A mostly unstated restriction that will be
-relaxed in the next phase is that every sequential transaction on a container
-is considered dependent on the earlier transaction. Should one output be
-delayed and the subsequent five succeed, when the delayed process finally
-fails, all six transactions are rolled back. The thought of using this
-mechanism to store subsequent checkpoint outputs in the same container to both
-save space, but not care if one fails, cannot work in the current form. This
-has been acknowledged and is planned on being relaxed in phase two.
+mechanism can work very well. A mostly unstated restriction that is being
+relaxed is that every sequential transaction on a container is considered
+dependent on the earlier transaction. Should one output be delayed and the
+subsequent five succeed, when the delayed process finally fails, all six
+transactions are rolled back. The thought of using this mechanism to store
+subsequent checkpoint outputs in the same container to both save space, but not
+care if one fails, cannot work in the current form. This has been acknowledged
+and is planned on being relaxed in phase two.
 
 \subsection{DAOS Epochs}
 The Epoch mechanism differs from transactions. Instead of focusing on when a
@@ -380,8 +381,10 @@ transaction (epoch) IDs will not be represented.
 
 \subsection{Metadata Management}
 Eliminating metadata management as a special case and instead treating it just
-as data is a central design goal of the Fast Forward project. Unfortunately,
-it is not completely achieved.
+as data is a central design goal of the Fast Forward project. This is a hybrid
+approach to metadata management that is half-way between providing no inherent
+metadata support and having a fully integrated, but separate metadata
+manaegement system.
 
 Eliminating metadata as a core component of a file system is not new. It has
 been explored as part of the Light Weight File Systems
@@ -423,25 +426,28 @@ With a client-side only approach, there is a serious risk of the metadata
 service and the object store getting out of sync.  While having a metadata-less
 object storage service is desirable, the different semantics from traditional
 file systems requires some considerations. In this case, should these services
-get out of sync, three particular risks introduced.  First, a client could
+get out of sync, three particular risks are introduced.  First, a client could
 create an entry in the metadata service that does not correspond to any objects
 in the object store. Second, a client could create objects that have no
 associated metadata entries. Third, updates to the metadata or object store
 service should be an atomic operation, but due to a lack of coordination, a
-window where the system is inconsistent appears.  Ultimately, the consistency
-semantics required must be determined. If a metadata service is required and it
-must be in sync with the object storage service, then additional work must be
-performed. In traditional file systems, the metadata and object storage updates
-are atomic. With decoupling metadata from object storage, should this atomicity
-still be desired, it requires both the ability for the services to participate
-in a task that is part of a larger atomic operation and a higher-level
-mechanism to manage the atomic operation. Overall, while additional work is
-required to maintain a client-side only metadata service, it eliminates any
-potential bottlenecks related to updating metadata related to the object
-storage. The burden of tracking striping and other metadata that has
-traditionally been part of the metadata associated with the file system will
-have to be maintained by the object storage service. The lack of a centralized,
-serialized bottleneck to store that information improves concurrency.
+window where the system is inconsistent appears.
+
+Ultimately, the consistency semantics required must be determined. If a
+metadata service is required and it must be in sync with the object storage
+service, then additional work must be performed. In traditional file systems,
+the metadata and object storage updates are atomic. With decoupling metadata
+from object storage, should this atomicity still be desired, it requires both
+the ability for the services to participate in a task that is part of a larger
+atomic operation and a higher-level mechanism to manage the atomic operation.
+
+Overall, while additional work is required to maintain a client-side only
+metadata service, it eliminates any potential bottlenecks related to updating
+metadata related to the object storage. The burden of tracking striping and
+other metadata that has traditionally been part of the metadata associated with
+the file system will have to be maintained by the object storage service. The
+lack of a centralized, serialized bottleneck to store that information improves
+concurrency.
 
 \subsection{Comparison to \DDTns}
 The \DDT project~\cite{lofstead:2012:txn} sought to develop an efficient
@@ -530,22 +536,16 @@ significant differences. Some of the different choices made by IOD raise some
 possible concern.
 
 In the multi-leader model, using a count of client connections to determine if
-transaction is complete is problematic.  First, the aggregation of completion
+transaction is complete is problematic. First, the aggregation of completion
 messages are based on the local aggregation point reporting to the transaction
 leader.  There is no ability to detect or recover from a failure of this IOD
 process that would report to the transaction leader. The current assumption
 that the IOD layer will be an MPI program is not workable until MPI can fully
 support fault detection and recovery including removing and adding processes.
-Second, because a simple count of participating processes is sent with the
-beginning of the transaction, each process is strictly limited to a single
-output operation.  This precludes a process writing multiple array shards, for
-example. To put this in concrete terms, it means that a file could only contain
-a single, globally distributed variable (at the root level of HDF5) OR an
-attribute per process. If this count actually represents a begin/end
-transaction pair instead, it suffers from a lack of accountability for missing
-object (shard) writes. All it would indicate is that a process started and
-ended a transaction connection. There is no validation that a process has done
-everything required of it.
+Second, since the counts represent a begin/end transaction pair, it suffers
+from a lack of accountability for missing object (shard) writes. All it would
+indicate is that a process started and ended a transaction connection. There is
+no validation that a process has done everything required of it.
 
 \begin{figure}[ht]
 \centering
@@ -568,10 +568,10 @@ managed, the singleton sub-transactions, ones in which only a single process
 participates, must be declared before the transaction begins so that its
 existence can be broadcast as part of the begin transaction message. This
 ensures there is global knowledge that the sub-transaction is expected.  That
-way if the coordinator (transaction leader) fails, which ever process takes
-over that role knows to expect a completion message for that sub-transaction or
-the overall transaction cannot complete. Global sub-transactions can be defined
-at any time since they are a global, synchronized operation broadcasting their
+way if the coordinator (transaction leader) fails, whichever process takes over
+that role knows to expect a completion message for that sub-transaction or the
+overall transaction cannot complete. Global sub-transactions can be defined at
+any time since they are a global, synchronized operation broadcasting their
 existence. While this additional layer does introduce messaging, the overhead
 is quite small.
 
@@ -625,11 +625,11 @@ At a broader level, there are some concerns that were partially clarified
 through conversations with the team.  Consider a shared file system across an
 HPC data center. The current design maintains the metadata in its own
 container. Since copying data from the IOD layer to the DAOS layer requires an
-explicit persist call, how and when synchronizing the metadata across the 
-layers and potentially across machines occurs is undefined. By delaying the
+explicit persist call, how and when synchronizing the metadata across the
+layers and potentially across machines occurs is undefined. Delaying
 synchronization until an explicit persist is called will reduce the update
-frequency, it does delay the visibility of data. Ideally, the metadata object
-would need to be automatically persisted every time a container transaction is
+frequency, but delays the data visibility. Ideally, the metadata object would
+need to be automatically persisted every time a container transaction is
 persisted to the DAOS layer.
 
 The implication of this is that every transaction persist is double operation
@@ -670,6 +670,10 @@ analysis presented in this paper will prove useful for the next phase of the
 Fast Forward project.
 
 \section{Acknowledgements}
+The authors would like to thank Gary Grider, Eric Barton, Quincey Koziol, and
+John Bent for their early review comments and discussions that clarified the
+details of the design, the intent of the design, and the future plans.
+
 \includegraphics[scale=0.07]{logos/doe_logo}
 \includegraphics[scale=0.30]{logos/snl_logo}
 \includegraphics[scale=0.35]{logos/nnsa_logo}
