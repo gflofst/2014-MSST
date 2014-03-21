@@ -116,24 +116,26 @@ of an object can be stored in potentially greatly reduced space. It assumes the
 client interface will be through an IO library affording a more complicated
 interface that offers richer functionality requiring only minimal end-user code
 changes.  Managing most data access in a platform-local layer rather than
-requiring
-writing to centralized storage will better support the performance and energy
-requirements of extreme scale integrated application workflows. At a more
-detailed view, the various layers of the IO stack each contribute different
-functionality and performance implications.
+requiring writing to centralized storage will better support the performance
+and energy requirements of extreme scale integrated application workflows. At a
+more detailed view, the various layers of the IO stack each contribute
+different functionality and performance implications.
 
 The basic architecture incorporates five layers. The top layer is a high level
-IO library, such as the demonstration HDF-5 library~\cite{hdf5}. The intent is to only have
-access to the storage stack through such an API to manage the complexity of
-working with the lower layers. Below the user API is an IO forwarding layer
-that redirects IO calls from the compute nodes to the IO dispatching layer.
-This IO forwarding layer is analogous to the function of the IO nodes in a
-BlueGene machine. The next two layers have considerable functionality. The IO
-dispatcher (IOD) serves as the primary storage interface for the IO stack and
-is the only way to reach the persistent storage array in lower layers. The
-Data Access Object Storage (DAOS) layer serves as the persistent storage
-interface. At the bottom is the Versioning Object Storage Device (VOSD). It
-serves as the interface for storing objects of all types efficiently.
+IO library, such as the demonstration HDF-5 library~\cite{hdf5}. The intent is
+to only have access to the storage stack through such an API to manage the
+complexity of working with the lower layers. Below the user API is an IO
+forwarding layer that redirects IO calls from the compute nodes to the IO
+dispatching layer.  This IO forwarding layer is analogous to the function of
+the IO nodes in a BlueGene machine. The next two layers have considerable
+functionality. The IO dispatcher (IOD) serves as the primary storage interface
+for the IO stack and is the only way to reach the persistent storage array in
+lower layers. The Data Access Object Storage (DAOS) layer serves as the
+persistent storage interface and is intended to be the foundation on which
+everything else is built with no dependence on any technologies specified above
+it. For example, the IOD layer and burst buffers are not required for DAOS to
+operate properly. At the bottom is the Versioning Object Storage Device (VOSD).
+It serves as the interface for storing objects of all types efficiently.
 
 The focus of this paper is primarily the IOD layer given the critical role it
 has in the performance and functionality of the entire stack. Most of the key
@@ -166,9 +168,10 @@ Along with the analysis of the published design documents, a discussion of the
 design philosophy representing the overall intent is presented. This
 information represents information that may or may not have been written down,
 but is the intent of ultimate product. These insights were gained based on
-personal conversations with the team members discussing some of the potential
-challenges with the design as written. These ideas are presented to give a
-fuller picture of where the project is going rather than dwelling on the
+personal conversations with the team
+members~\cite{JohnBent,QuinceyKoziol,EricBarton} discussing some of the
+potential challenges with the design as written. These ideas are presented to
+give a fuller picture of where the project is going rather than dwelling on the
 limitations of the published documents.
 
 The rest of the paper is organized as follows. Section~\ref{sec:burst}
@@ -206,9 +209,13 @@ like changing the fast array dimension on shared, spinning media.  The design
 of DAOS assumes that it will only be involved when persisting a completed
 transaction and only for a fraction of the total transactions created.
 Transaction frequency at the IOD layer can be higher since IOD does not
-``flatten'' transactions. Flattening is the process of making each transaction
-fully-independent by duplicating any data unchanged from previous transactions.
-DAOS epochs are persisted, flattened transactions from the IOD layer.
+``flatten'' transactions. Flattening is the process of transfering the set of
+copy-on-write changes from transaction/epoch $n$ to transaction $n+m$ into the
+DAOS layer. The DAOS layer mirrors the copy-on-write functionality, but stores
+the differences between epochs rather than individual transactions. The primary
+difference is that at the DAOS layer, data is stored in large, logically
+contiguous chunks to manage the metadata load and hopefully improve read
+performance.
 
 One of the bigger concerns is the observation that the original data staging
 proposals all used compute nodes while the newer proposals seek not only to
@@ -238,23 +245,30 @@ stack, three problems arise.  First, the amount of network bandwidth, IO
 bandwidth, and compute power consumed for example operations from a single
 application is likely to completely monopolize the IOD processes. Second, if
 space and time partitioning is used instead, the functionality risks being too
-small to be useful. Third, the hardware performance advantage for SSDs is
-questionable. Current NAND-based flash devices top out at around 400 MB/sec.
-The key spec that is missing from this number is that 400 MB/sec is a measure
-of the fixed number of available IOPS multiplied by the block size. This
-represents the ideal streaming performance possible. The problem is that it
-costs an IOP to read 1 byte or 1 block (4KB or 8KB, depending on the device).
-It costs 1 IOP to write a full block--usually. In some cases, it will cost 2
-IOPs.  This accounts for the required pre-erase write prior to writing to a
-reused block. In the worst case, it can be 3 IOPS per write. This would be for
-a partial block write (read the old block, erase, write the modified block).
-One-third of 400 MB/sec, about 133 MB/sec, is well below the streaming
-performance of HDDs.  Granted, there is still rotational and seek latency to
-deal with for HDDs, but the advantage for SSDs has evaporated and potentially
-turned into a penalty at a considerable cost premium.  There are faster SSD
-solutions on the market that incorporate DRAM for caching and using the PCIe
-bus, for example, but their price precludes them from use in an extreme scale
-platform.
+small to be useful. Third, the long-term hardware performance advantage for
+SSDs is questionable. Recent studies have shown that the erase-before-write
+and interference between reading and writing with flash-based SSDs can cause
+severe performance problems~\cite{skourtis:2013:ssd-performance}. The inclusion
+of an optional use SSD layer in the new Trinity machine at Los Alamos will
+offer a testbed to determine how likely these observed problems would affect a
+production extreme scale platform.
+
+%Current NAND-based flash devices top out at around 400 MB/sec.
+%The key spec that is missing from this number is that 400 MB/sec is a measure
+%of the fixed number of available IOPS multiplied by the block size. This
+%represents the ideal streaming performance possible. The problem is that it
+%costs an IOP to read 1 byte or 1 block (4KB or 8KB, depending on the device).
+%It costs 1 IOP to write a full block--usually. In some cases, it will cost 2
+%IOPs.  This accounts for the required pre-erase write prior to writing to a
+%reused block. In the worst case, it can be 3 IOPS per write. This would be for
+%a partial block write (read the old block, erase, write the modified block).
+%One-third of 400 MB/sec, about 133 MB/sec, is well below the streaming
+%performance of HDDs.  Granted, there is still rotational and seek latency to
+%deal with for HDDs, but the advantage for SSDs has evaporated and potentially
+%turned into a penalty at a considerable cost premium.  There are faster SSD
+%solutions on the market that incorporate DRAM for caching and using the PCIe
+%bus, for example, but their price precludes them from use in an extreme scale
+%platform.
 
 Given these features, the optionality and even incorporation of burst buffers
 in the current design should be carefully considered. Much of the advanced, key
@@ -275,8 +289,13 @@ compute capability of these few nodes for data processing, but also to take
 advantage of new layers in the storage hierarchy. By incorporating NVRAM into
 compute nodes, new options for buffering data prior to being moved to
 centralized storage become available and addresses some of the concerns about
-SSD performance. This lessens the impact of some operators while offering
-additional options for places to store data.
+SSD performance. For example, including a small amount of Phase Change memory
+into many or most compute nodes offers a way to move data outside of both the
+compute and IO path for data and communication intensive operations. Other 
+projects~\cite{zheng:2010:predata} have suggested this will have value, but the
+cost will have to be considered as part of the overall platform budget. This
+lessens the impact of some operators while offering additional options for
+places to store data.
 
 Burst buffers being optional is a high level goal, but not one considered at a
 detailed level within the design. For example, if there is no burst buffer, all
@@ -290,47 +309,49 @@ fully functional end-to-end IOD layer implementation for a production system.
 Another concern that is acknowledged, but no thought has been applied to, is
 the requirement that a single IOD process be the master for any operation.
 Should the number of concurrent applications exceed the available nodes,
-sharing an IOD process will be required. Since partitioning of the IOD
-processes for exclusive use by particular applications is the assumed operating
-mode, should insufficient IOD resources be available, either a job could be
-delayed or IOD resources could be reallocated from a different process could be
-redeployed for use by the new job. Handling resilience concerns for the IOD
-processes must also be address. These sorts of considerations still need to be
-made for a full production system.
+sharing an IOD process will be required. The requirements both in terms of
+scheduling and resource management were cut from the project due to funding
+limitations. Since partitioning of the IOD processes for exclusive use by
+particular applications is the assumed operating mode, should insufficient IOD
+resources be available, either a job could be delayed or IOD resources could be
+reallocated from a different process could be redeployed for use by the new
+job. Handling resilience concerns for the IOD processes must also be address.
+These sorts of considerations still need to be made for a full production
+system.
 
 \section{Transactions and Epochs}
 \label{sec:transactions}
 
 The transaction mechanism manifests in two forms. At the IOD layer, they are
 called transactions and are used to judge whether or not a set of distributed,
-asynchronous modifications across a set of related objects is complete or not
-and control access through treating the transaction ID of committed transaction
-as a version identifier.  At the DAOS layer, they are called epochs and
-represent persisted (durable) transactions from the IOD layer. Each of these
-offers different functionality, but are connected as is explained below. How
-these differ from the \DDT approach is also explored. While IOD's and \DDTns's
-transactions are seemingly very different, they use a similar high-level
-design, but very different implementation, to solve the same problem.
+asynchronous modifications across a set of related objects is complete or not.
+It is also used to control access by treating the transaction ID of committed
+transaction as a version identifier.  At the DAOS layer, they are called epochs
+and represent persisted (durable) transactions from the IOD layer. Each of
+these offers different functionality, but are connected as is explained below.
+How these differ from the \DDT approach is also explored.  While IOD's and
+\DDTns's transactions are seemingly very different, they use a similar
+high-level design, but very different implementation, to solve the same
+problem.
 
 \subsection{IOD Transactions}
 To understand how transactions are used in the IOD layer, some terminology and
 concepts must be explained first. At the coarsest grain level is a container.
-Each container serves to host a transaction and contains a collection of
-objects. Conceptually, containers corresponds to a file in a traditional file
-system. The objects in each container represent different data within a file.
-The three initially defined object types are key-value stores,
+Each container provides the single access context through which to access a
+collection of objects. Transactions are the way that a series of modifications
+to the objects within a container are treated atomically. Conceptually,
+containers corresponds to a something akin to an HDF5 file in a traditional
+file system. The objects in each container represent different data within a
+file.  The three initially defined object types are key-value stores,
 multi-dimensional arrays, and blobs.  The easiest way to understand these types
 is to evaluate these from the perspective of an HDF-5 file, the initial user
 interface layer. The key-value store represents a collection of attributes or
-groups. The array represents part of a potentially multi-dimensional array. It
-is referred to as a shard because it is likely a small piece of a globally
-defined array. The blob represents a byte stream of arbitrary contents.  The
-fundamental difference between an array and a blob is that the array has
-metadata identifying its portion within the global, logical space while the
-blob is simply a 1-dimensional array of bytes that is not shared across IOD
-nodes.  Should an operation be deployed into IOD to manipulate an array within
-a container, it would operate on the array rather than on blobs. Given this
-context, the transactions come in two forms.
+groups. The array represents a potentially multi-dimensional array.  The blob
+represents a byte stream of arbitrary contents.  The fundamental difference
+between an array and a blob is that the array has metadata specifying the
+dimension(s). At the physical layer within the IO nodes, all of these objects
+may be striped across multiple IO nodes.  Given this context, the transactions
+come in two forms.
 
 First is a single leader transaction where the IOD manages based on calls from
 a single client. The underlying assumption is that the client side will manage
@@ -350,35 +371,31 @@ mechanism that can determine if a process or node is no longer reachable. This
 defines how a fault will be detected and what will trigger a passive fault
 recovery (i.e., transaction abort).
 
-The team uses the term ``Primary'' to define the process(es) that contact the
-IOD layer directly to open a container. Unfortunately, this term is never used
-nor defined within any of the published documents. There are some very positive
-and negative performance implications of this approach. On the positive side,
-like PVFS, it is possible for a single process to open a container and share
-that handle with other processes reducing the load on the IOD layer. The key
-idea is that the single leader vs. multi-leader transaction mode is
-automatically defined based on the number of Primary processes that start a
-transaction on a container. This greatly simplifies any additional client-side
-load in using the different styles of transactions. Also on the positive side,
-it offers the ability to have a subset of processes that are considered
-transaction participants affording reduced load on the IOD processes and more
-localized transaction management on the client side. On the negative side, for
-a fully IOD managed transaction, ALL processes must start the transaction on
-the container forcing a potentially immense number of simultaneous calls to the
-IOD layer to open a container. This sort of onslaught is what is dealt with on
-metadata servers today with mass file opens. The reality is that this ends up
-having the same sort of performance implications as distributed denial of
-service attacks on the IOD processes.
+There are two steps for beginning a transaction on a container. The first step
+is for one or more process to open the container. This handle can be shared
+eliminating the need for every participating process to hit the IOD layer to
+open the file. The second step is a call to determine how many leaders will
+participate in the transaction. In the single leader case, there is no
+aggregation of success/fail statuses to determine the final transaction state.
+Instead, it is assumed that the client will fully manage the transaction. In
+the multi-leader model, some subset from 2 to $n$ where $n$ is the count of all
+processes, declare themselves a leader for this container operation to the IOD
+layer. Any number of processes can participate in modifying container without
+regard to whether or not they are a leader. Once each leader has finished, with
+the assumption that any clients they may be responsible for are finished as
+well, the IOD layer aggregates those responses to either commit or abort the
+transaction.
 
-Ultimately, with the passive detection of faults for Primaries, the transaction
-mechanism can work very well. A mostly unstated restriction that is being
-relaxed is that every sequential transaction on a container is considered
+Ultimately, with the passive detection of faults for transaction leaders, the
+transaction mechanism can work very well. A mostly unstated restriction that is
+being relaxed is that every sequential transaction on a container is considered
 dependent on the earlier transaction. Should one output be delayed and the
 subsequent five succeed, when the delayed process finally fails, all six
 transactions are rolled back. The thought of using this mechanism to store
 subsequent checkpoint outputs in the same container to both save space, but not
 care if one fails, cannot work in the current form. This has been acknowledged
-and is planned on being relaxed in phase two.
+and is being relaxed requiring a new parameter to the creation of a transaction
+determining if it will be dependent or not.
 
 \subsection{DAOS Epochs}
 The Epoch mechanism differs from transactions. Instead of focusing on when a
@@ -390,11 +407,12 @@ transaction (epoch) IDs will not be represented since not all IOD transactions
 are necessarily persisted.
 
 \subsection{Metadata Management}
-Eliminating metadata management as a special case and instead treating it just
-as data is a central design goal of the Fast Forward project. This is a hybrid
-approach to metadata management that is half-way between providing no inherent
-metadata support and having a fully integrated, but separate metadata
-manaegement system.
+Metadata management has been a perennial challenge for parallel storage
+systems.  Eliminating metadata management as a special case and instead
+treating it just as data is a central design goal of the Fast Forward project.
+This is a hybrid approach to metadata management that is half-way between
+providing no inherent metadata support and having a fully integrated, but
+separate metadata manaegement system.
 
 Eliminating metadata as a core component of a file system is not new. It has
 been explored as part of the Light Weight File Systems
@@ -405,24 +423,27 @@ workable. Using this hybrid approach is less common~\cite{weil:2006:ceph} and
 introduces other issues.
 
 IOD and DAOS both share a philosophy that they will have to maintain the
-metadata about how objects are striped and where they are placed. It was
-decided that the additional data to track the namespace as well was a small
-enough additional increment that it was worth maintaining within the system.
+metadata about how the physical pieces of the logical objects are striped and
+where they are placed. The primary metadata management is done at the DAOS
+layer with the IOD layer relying on the DAOS layer for all authoritative
+information about containers and objects. The only place where the IOD layer
+manages metadata for itself is to manage how the different objects are striped
+across the IO nodes.
 
 \subsubsection{Design Philosophy}
 While the metadata design is not fully defined, there are a few things that
 are intended. For example, there is a standard, well-known container that is
 the system metadata. This includes the list of all other containers. This
 container is treated like any other data in the system and striped as
-appropriate at both the IOD and the DAOS layers. Unfortunately, this still
-couples the metadata to a single object that must serialize access. If the
-metadata, including information about striping and other data layout operations
-were separated completely from the data path, more scalable throughput could be
-achieved. The real challenge of this is introduced by the IOD, DAOS, and VOSD
-layers. Each of these requires some different metadata storage and the
-migration is transparent to the user. Supporting fully independent metadata
-with this model is difficult. Serious thought on how to do this effectively
-outside the data path should be considered for phase two.
+appropriate. Unfortunately, this still couples the metadata to a single object
+that must serialize access. If the metadata, including information about
+striping and other data layout operations were separated completely from the
+data path, more scalable throughput could be achieved. The real challenge of
+this is introduced by the IOD, DAOS, and VOSD layers collectively. Each of
+these requires some different metadata storage and the migration is transparent
+to the user.  Supporting fully independent metadata with this model is
+difficult. Serious thought on how to do this effectively outside the data path
+should be considered for phase two.
 
 Based on the lessons from the \DDT metadata
 service~\cite{lofstead:2012:txn-metadata} construction and the prior
@@ -484,13 +505,14 @@ The second iteration of the protocol~\cite{lofstead:2013:pdsw-txn} fixed
 scalability issues and demonstrated a scalable client-side coordination model
 with excellent performance. The performance measured for a complex transaction
 with \DDT is illustrated in Figure~\ref{fig:performance}. This performance is
-explored in detail in a previous paper~\cite{lofstead:2013:pdsw-txn}. The
-breakdown of the number of participants in each role is shown in
-Table~\ref{tab:scaling}. For comparison, consider the Number of
-Sub-Coordinators equivalent to IOD processes. The Processes Per Sub-Coordinator
-represents the number of clients that use a particular IOD process. For these
-tests, we maintained a balanced distribution and always used at least two
-sub-coordinators to slow down the processing.
+explored in detail in a previous paper~\cite{lofstead:2013:pdsw-txn}.
+%The
+%breakdown of the number of participants in each role is shown in
+%Table~\ref{tab:scaling}. For comparison, consider the Number of
+%Sub-Coordinators equivalent to IOD processes. The Processes Per Sub-Coordinator
+%represents the number of clients that use a particular IOD process. For these
+%tests, we maintained a balanced distribution and always used at least two
+%sub-coordinators to slow down the processing.
 
 \begin{figure}[ht]
 %\vspace{-0.15in}
@@ -502,35 +524,35 @@ sub-coordinators to slow down the processing.
 %\vspace{-0.15in}
 \end{figure}
 
-\begin{table}[ht]
-    \vspace{-0.15in}
-    \centering
-    \caption[Scaling Configuration]{Performance Tests Scaling Configuration}
-    \bigskip
-    \vspace{-0.15in}
-
-    \begin{tabular}{|r|r|r|}
-\hline
-Processes & \vtop{\hbox{\strut Number of}\hbox{\strut Sub-Coordinators}} & \vtop{\hbox{\strut Processes Per} \hbox{\strut Sub-Coordinator}}\\
-\hline
-%8 & 2 & 4 \\
-%16 & 2 & 8 \\
-%32 & 2 & 16 \\
-%64 & 2 & 32 \\
-%128 & 2 & 64 \\
-256 & 2 & 128 \\
-512 & 2 & 256 \\
-1024 & 4 & 256 \\
-2048 & 8 & 256 \\
-4096 & 16 & 256 \\
-8192 & 32 & 256 \\
-16384 & 64 & 256 \\
-32768 & 128 & 256 \\
-65536 & 256 & 256 \\
-\hline
-    \end{tabular}
-    \label{tab:scaling}
-\end{table}
+%\begin{table}[ht]
+%    \vspace{-0.15in}
+%    \centering
+%    \caption[Scaling Configuration]{Performance Tests Scaling Configuration}
+%    \bigskip
+%    \vspace{-0.15in}
+%
+%    \begin{tabular}{|r|r|r|}
+%\hline
+%Processes & \vtop{\hbox{\strut Number of}\hbox{\strut Sub-Coordinators}} & \vtop{\hbox{\strut Processes Per} \hbox{\strut Sub-Coordinator}}\\
+%\hline
+%%8 & 2 & 4 \\
+%%16 & 2 & 8 \\
+%%32 & 2 & 16 \\
+%%64 & 2 & 32 \\
+%%128 & 2 & 64 \\
+%256 & 2 & 128 \\
+%512 & 2 & 256 \\
+%1024 & 4 & 256 \\
+%2048 & 8 & 256 \\
+%4096 & 16 & 256 \\
+%8192 & 32 & 256 \\
+%16384 & 64 & 256 \\
+%32768 & 128 & 256 \\
+%65536 & 256 & 256 \\
+%\hline
+%    \end{tabular}
+%    \label{tab:scaling}
+%\end{table}
 
 At a high level, both \DDT and the IOD transactions have the same design. In
 both cases, a hierarchical model is employed. In the case of \DDTns, it is a
@@ -545,21 +567,23 @@ into the master through second-level leaders. Beyond that, there are some
 significant differences. Some of the different choices made by IOD raise some
 possible concern.
 
-In the multi-leader model, using a count of client connections to determine if
-transaction is complete is problematic. First, the aggregation of completion
-messages are based on the local aggregation point reporting to the transaction
-leader.  There is no ability to detect or recover from a failure of this IOD
-process that would report to the transaction leader. The current assumption
-that the IOD layer will be an MPI program is not workable until MPI can fully
-support fault detection and recovery including removing and adding processes.
-Second, since the counts represent a begin/end transaction pair, it suffers
-from a lack of accountability for missing object (shard) writes. All it would
-indicate is that a process started and ended a transaction connection. There is
-no validation that a process has done everything required of it.
+The multi-leader model introduces the possibility of forcing a rollback of an
+entire transaction when a partial retry might be sufficient for success. Since
+the transactions are managed at a high level rather than the individual
+tasks, a failure in a limited distributed task can cause the entire transaction
+to fail. For example, consider 10 processes each have 5 tasks, but 3 of those
+10 have an additional shared task to complete. If the task shared by the 3
+processes fails on any of the three, the entire transaction would roll back
+because it is a coarse-grained success/failure. If a concept like
+sub-transactions at a task granularity were used, then it would be possible for
+the one process that failed to report just that failure. Then the transaction
+manager could reassign the resources for these 3 processes and try just that
+operation again. If it now succeeds, then the overall transaction can be marked
+successful only redoing the minimum amount of work required.
 
 \begin{figure}[ht]
 \centering
-\includegraphics[keepaspectratio=true, width=0.9\columnwidth]{images/optimized-protocol}
+\includegraphics[keepaspectratio=true, width=0.5\columnwidth]{images/optimized-protocol}
 \vspace{-0.15in}
 \caption{Optimized Protocol}
 \label{fig:optimized-protocol}
@@ -680,9 +704,9 @@ analysis presented in this paper will prove useful for the next phase of the
 Fast Forward project.
 
 \section{Acknowledgements}
-The authors would like to thank Gary Grider, Eric Barton, Quincey Koziol, and
-John Bent for their early review comments and discussions that clarified the
-details of the design, the intent of the design, and the future plans.
+The authors would like to thank Eric Barton, John Bent, Gary Grider, and
+Quincey Koziol for their early review comments and discussions that clarified
+the details of the design, the intent of the design, and the future plans.
 
 \includegraphics[scale=0.07]{logos/doe_logo}
 \includegraphics[scale=0.30]{logos/snl_logo}
