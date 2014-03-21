@@ -57,21 +57,22 @@
 \begin{abstract}
 With phase 1 of the Fast Forward Storage and IO Stack project complete, it is
 an excellent opportunity to evaluate many of the decisions made to feed into
-the phase 2 effort. The initial effort to define a next generation file system
-has made admirable contributions in architecture and design. Formalizing the
-general idea of data staging as burst buffers for the file system will help
-manage the performance variability and offer the data processing opportunities
-outside the main compute and file system. Adding a transactional mechanism to
-manage faults and data visibility helps enable effective analytics without
-having to work around the IO stack semantics.
+the phase 2 effort. The initial effort to define a next generation storage
+system has made admirable contributions in architecture and design. Formalizing
+the general idea of data staging into burst buffers for the storage system will
+help manage the performance variability and offer additional data processing
+opportunities outside the main compute and storage system. Adding a
+transactional mechanism to manage faults and data visibility helps enable
+effective analytics without having to work around the IO stack semantics.
 
-While these and their other contributions are valuable, similar efforts made
+While these and other contributions are valuable, similar efforts made
 elsewhere may offer attractive alternatives or differing semantics that could
 yield a more feature rich environment with little to no additional overhead.
 For example, the Doubly Distributed Transactions (\DDTns) protocol offers an
 alternative approach for incorporating transactional semantics into the data
-path. The PreDatA project examined how to get the best throughput for data
-operators can offer some insights for refining the Burst Buffer concept.
+path. Another project, PreDatA, examined how to get the best throughput for
+data operators and may offer additional insights into further refinements of
+the Burst Buffer concept.
 
 This paper examines some of the choices made by the FastForward team and
 compares them with other options and offers observations and suggestions based
@@ -102,26 +103,27 @@ industrial partners contracted include the Intel Lustre team, EMC, DDN, and the
 HDF Group. This team has developed a specification
 set~\cite{fastforward:2014:docs} for a future IO stack to address the
 identified challenges. The first phase recently completed with a second phase
-getting underway. The core focus of the first phase was basic functionality and
-design. Overriding many of the decisions during this and any subsequent phases
-is the reality of budgets. Placing GBs of NVRAM on every node, while a
-potentially advantageous approach, is not financially feasible. With this in
-mind, the second phase will refine this design incorporating fault recovery and
-other features missing from the first phase.
+currently getting underway as of early 2014. The core focus of the first phase
+was basic functionality and design. Overriding many of the decisions during
+this and any subsequent phases is the reality of budgets. Placing GBs of NVRAM
+on every node, while a potentially advantageous approach, is not financially
+feasible. With this in mind, the second phase will refine this design
+incorporating fault recovery and other features missing from the first phase.
 
-The overall design seeks to offer a byte-granular, multi-version concurrency
+The overall design seeks to offer byte-granular, multi-version concurrency
 control. Through the use of a copy-on-write style mechanism, multiple versions
-of a file can be stored in potentially greatly reduced space. It assumes the
+of an object can be stored in potentially greatly reduced space. It assumes the
 client interface will be through an IO library affording a more complicated
-interface that offers richer functionality without requiring user code changes.
-Managing most data access in a machine-local layer rather than requiring
+interface that offers richer functionality requiring only minimal end-user code
+changes.  Managing most data access in a platform-local layer rather than
+requiring
 writing to centralized storage will better support the performance and energy
 requirements of extreme scale integrated application workflows. At a more
 detailed view, the various layers of the IO stack each contribute different
 functionality and performance implications.
 
 The basic architecture incorporates five layers. The top layer is a high level
-IO library, such as the demonstration HDF-5 library. The intent is to only have
+IO library, such as the demonstration HDF-5 library~\cite{hdf5}. The intent is to only have
 access to the storage stack through such an API to manage the complexity of
 working with the lower layers. Below the user API is an IO forwarding layer
 that redirects IO calls from the compute nodes to the IO dispatching layer.
@@ -191,18 +193,22 @@ buffer given the lack of any dedicated hardware support for this functionality.
 The desired outcome of these initial studies is to motivate how such
 functionality might be incorporated and the potential benefits.  Later, these
 concepts were proposed to be incorporated as part of the IO
-stack~\cite{bent:2012:challenges,bent:2012:burst-buffer}.  The current
-FastForward IOD design recommends incorporating SSDs, but specifically lists
-these devices as optional. Unfortunately, both incorporating burst buffers and
-the use of SSDs in the IOD layer may be problematic.  First, the IOD and DAOS
-designs currently are written assuming burst buffers. This means that the
-bulk of IO operations will only hit the IOD layer and proposed functionality,
-such as the function operators, do not discuss the impact on the DAOS layer or
-the operators themselves should a burst buffer not be available.  Consider the
-important functionality of data rearrangement and doing things like changing
-the fast array dimension on shared, spinning media.  The design of DAOS assumes
-that it will only be involved when persisting a completed transaction and only
-for a fraction of the total transactions created. 
+stack~\cite{nowoczynski:2008:zest,bent:2012:challenges,bent:2012:burst-buffer}.
+The current FastForward IOD design recommends incorporating SSDs, but
+specifically lists these devices as optional. Unfortunately, not incorporating
+burst buffers and the use of SSDs in the IOD layer may be problematic.  First,
+the IOD and DAOS designs currently are written assuming burst buffers. This
+means that the bulk of IO operations will only hit the IOD layer and proposed
+functionality, such as the function shipping, do not discuss the impact on the
+DAOS layer or the operators themselves should a burst buffer not be available.
+Consider the important functionality of data rearrangement and doing things
+like changing the fast array dimension on shared, spinning media.  The design
+of DAOS assumes that it will only be involved when persisting a completed
+transaction and only for a fraction of the total transactions created.
+Transaction frequency at the IOD layer can be higher since IOD does not
+``flatten'' transactions. Flattening is the process of making each transaction
+fully-independent by duplicating any data unchanged from previous transactions.
+DAOS epochs are persisted, flattened transactions from the IOD layer.
 
 One of the bigger concerns is the observation that the original data staging
 proposals all used compute nodes while the newer proposals seek not only to
@@ -220,34 +226,35 @@ scale platforms. If anything, the ratios offer more staging processes than IOD
 processes would be available.
 
 In the case of the written IOD design, it describes a fixed-sized staging area
-shared across all users simultaneously.  This is unlikely to be useful because
-of the limited compute and communication capacity to spare to perform these
-operations at a bottleneck in the IO path.  The use of a separate data staging
-area intentionally separate from the IO path allows using operators on limited
-resources leaving the IO path clear for strictly data movement. A nuance of
-this design is discussed in the Design Philosophy below.
+that is partitioned on a per-application basis.  This is unlikely to be useful
+because of the limited compute and communication capacity to spare to perform
+these operations at a bottleneck in the IO path.  The use of a separate data
+staging area intentionally separate from the IO path allows using operators on
+limited resources leaving the IO path clear for strictly data movement. A
+nuance of this design is discussed in the Design Philosophy below.
 
-By concentrating this functionality into the storage stack, three problems
-arise.  First, the amount of network bandwidth, IO bandwidth, and compute power
-consumed for example operations from a single application is likely to
-completely monopolize the IOD processes. Second, if space and time partitioning
-is used instead, the functionality risks being too small to be useful. Third,
-the hardware performance advantage for SSDs is questionable. Current NAND-based
-flash devices top out at around 400 MB/sec. The key spec that is missing from
-this number is that 400 MB/sec is a measure of the fixed number of available
-IOPS multiplied by the block size. This represents the ideal streaming
-performance possible. The problem is that it costs an IOP to read 1 byte or 1
-block (4KB or 8KB, depending on the device). It costs 1 IOP to write a full
-block--usually. In some cases, it will cost 2 IOPs.  This accounts for the
-required pre-erase write prior to writing to a reused block. In the worst case,
-it can be 3 IOPS per write. This would be for a partial block write (read the
-old block, erase, write the modified block). One-third of 400 MB/sec, about 133
-MB/sec, is well below the streaming performance of HDDs.  Granted, there is
-still rotational and seek latency to deal with for HDDs, but the advantage for
-SSDs has evaporated and potentially turned into a penalty at a considerable
-cost premium.  There are faster SSD solutions on the market that incorporate
-DRAM for caching and using the PCIe bus, for example, but their price precludes
-them from use in an extreme scale platform.
+By concentrating the Burst Buffers and function shipping into the storage
+stack, three problems arise.  First, the amount of network bandwidth, IO
+bandwidth, and compute power consumed for example operations from a single
+application is likely to completely monopolize the IOD processes. Second, if
+space and time partitioning is used instead, the functionality risks being too
+small to be useful. Third, the hardware performance advantage for SSDs is
+questionable. Current NAND-based flash devices top out at around 400 MB/sec.
+The key spec that is missing from this number is that 400 MB/sec is a measure
+of the fixed number of available IOPS multiplied by the block size. This
+represents the ideal streaming performance possible. The problem is that it
+costs an IOP to read 1 byte or 1 block (4KB or 8KB, depending on the device).
+It costs 1 IOP to write a full block--usually. In some cases, it will cost 2
+IOPs.  This accounts for the required pre-erase write prior to writing to a
+reused block. In the worst case, it can be 3 IOPS per write. This would be for
+a partial block write (read the old block, erase, write the modified block).
+One-third of 400 MB/sec, about 133 MB/sec, is well below the streaming
+performance of HDDs.  Granted, there is still rotational and seek latency to
+deal with for HDDs, but the advantage for SSDs has evaporated and potentially
+turned into a penalty at a considerable cost premium.  There are faster SSD
+solutions on the market that incorporate DRAM for caching and using the PCIe
+bus, for example, but their price precludes them from use in an extreme scale
+platform.
 
 Given these features, the optionality and even incorporation of burst buffers
 in the current design should be carefully considered. Much of the advanced, key
@@ -260,19 +267,19 @@ can address the performance concerns they are intended to cover.
 
 \subsection{Design Philosophy}
 The burst buffers design, as presented in the IOD documents, limits the
-placement of the function operators and SSDs for buffers to the IO nodes. The
-team does acknowledge the limitations of this design and intend to ultimately
-focus on spreading the IOD layer from the IO nodes into the compute area as
-well.  This is intended both to help address the limitations of the IO
-bandwidth and compute capability of these few nodes for data processing, but
-also to take advantage of new layers in the storage hierarchy. By incorporating
-NVRAM into compute nodes, new options for buffering data prior to being moved
-to centralized storage become available and addresses some of the concerns
-about SSD performance. This lessens the impact of some operators while offering
+placement of the function operators and SSD buffers to the IO nodes. The team
+does acknowledge the limitations of this design and intend to ultimately focus
+on spreading the IOD layer from the IO nodes into the compute area as well.
+This is intended both to help address the limitations of the IO bandwidth and
+compute capability of these few nodes for data processing, but also to take
+advantage of new layers in the storage hierarchy. By incorporating NVRAM into
+compute nodes, new options for buffering data prior to being moved to
+centralized storage become available and addresses some of the concerns about
+SSD performance. This lessens the impact of some operators while offering
 additional options for places to store data.
 
 Burst buffers being optional is a high level goal, but not one considered at a
-detailed level with the design. For example, if there is no burst buffer, all
+detailed level within the design. For example, if there is no burst buffer, all
 of the advanced functionality proposed for the IOD layer would have to work
 against the DAOS layer instead. For example, function shipping assumes it will
 operate on fast, local data within the IOD layer rather than against the
@@ -280,28 +287,30 @@ globally shared DAOS layer. With the additional desire to support using compute
 node resources for these operations, serious work will be required to make a
 fully functional end-to-end IOD layer implementation for a production system.
 
-Another concern that is acknowledged, but no thought has been applied to is the
-requirement that a single IOD process be the master for any operation. Should
-the number of concurrent applications exceed the available nodes, sharing an
-IOD process will be required. Since partitioning of the IOD processes for
-exclusive use by particular applications is the assumed operating mode, should
-insufficient IOD resources be available, either a job could be delayed or IOD
-resources could be reallocated from a different process could be redeployed for
-use by the new job. These sorts of considerations still need to be made for a
-full production system.
+Another concern that is acknowledged, but no thought has been applied to, is
+the requirement that a single IOD process be the master for any operation.
+Should the number of concurrent applications exceed the available nodes,
+sharing an IOD process will be required. Since partitioning of the IOD
+processes for exclusive use by particular applications is the assumed operating
+mode, should insufficient IOD resources be available, either a job could be
+delayed or IOD resources could be reallocated from a different process could be
+redeployed for use by the new job. Handling resilience concerns for the IOD
+processes must also be address. These sorts of considerations still need to be
+made for a full production system.
 
 \section{Transactions and Epochs}
 \label{sec:transactions}
 
 The transaction mechanism manifests in two forms. At the IOD layer, they are
-called transactions and are used to judge whether or not an output is complete
-or not and control access through treating the transaction ID as a version
-identifier. At the DAOS layer, they are called epochs and represent persisted
-(durable) transactions from the IOD layer. Each of these offers different
-functionality, but are connected as is explained below. How these differ from
-the \DDT approach is also explored. While IOD's and \DDTns's transactions are
-seemingly very different, they use a similar high-level design, but very
-different implementation, to solve the same problem.
+called transactions and are used to judge whether or not a set of distributed,
+asynchronous modifications across a set of related objects is complete or not
+and control access through treating the transaction ID of committed transaction
+as a version identifier.  At the DAOS layer, they are called epochs and
+represent persisted (durable) transactions from the IOD layer. Each of these
+offers different functionality, but are connected as is explained below. How
+these differ from the \DDT approach is also explored. While IOD's and \DDTns's
+transactions are seemingly very different, they use a similar high-level
+design, but very different implementation, to solve the same problem.
 
 \subsection{IOD Transactions}
 To understand how transactions are used in the IOD layer, some terminology and
@@ -309,18 +318,18 @@ concepts must be explained first. At the coarsest grain level is a container.
 Each container serves to host a transaction and contains a collection of
 objects. Conceptually, containers corresponds to a file in a traditional file
 system. The objects in each container represent different data within a file.
-The three initially defined object types are key-value store, array, and blob.
-The easiest way to understand these types is to evaluate these from the
-perspective of an HDF-5 file, the initial user interface layer. The key-value
-store represents a collection of attributes or groups. The array represents
-part of a potentially multi-dimensional array. It is referred to as
-a shard because it is likely a small piece of a globally defined array. The
-blob represents a byte stream of arbitrary contents.  The fundamental
-difference between an array and a blob is that the array has metadata
-identifying its portion within the global, logical space while the blob is
-simply a 1-dimensional array of bytes that is not shared across IOD nodes.
-Should an operation be deployed into IOD to manipulate an array within a
-container, it would operate on the array rather than on blobs. Given this
+The three initially defined object types are key-value stores,
+multi-dimensional arrays, and blobs.  The easiest way to understand these types
+is to evaluate these from the perspective of an HDF-5 file, the initial user
+interface layer. The key-value store represents a collection of attributes or
+groups. The array represents part of a potentially multi-dimensional array. It
+is referred to as a shard because it is likely a small piece of a globally
+defined array. The blob represents a byte stream of arbitrary contents.  The
+fundamental difference between an array and a blob is that the array has
+metadata identifying its portion within the global, logical space while the
+blob is simply a 1-dimensional array of bytes that is not shared across IOD
+nodes.  Should an operation be deployed into IOD to manipulate an array within
+a container, it would operate on the array rather than on blobs. Given this
 context, the transactions come in two forms.
 
 First is a single leader transaction where the IOD manages based on calls from
@@ -377,7 +386,8 @@ particular output is complete, an epoch represents incremental persisted copies
 of a container. To simplify the mapping between an IOD transaction and the DAOS
 epochs, when an IOD transaction is persisted to DAOS, the IOD transaction ID is
 the used as the epoch ID. The key difference is that at the DAOS layer, some
-transaction (epoch) IDs will not be represented.
+transaction (epoch) IDs will not be represented since not all IOD transactions
+are necessarily persisted.
 
 \subsection{Metadata Management}
 Eliminating metadata management as a special case and instead treating it just
@@ -427,11 +437,11 @@ service and the object store getting out of sync.  While having a metadata-less
 object storage service is desirable, the different semantics from traditional
 file systems requires some considerations. In this case, should these services
 get out of sync, three particular risks are introduced.  First, a client could
-create an entry in the metadata service that does not correspond to any objects
-in the object store. Second, a client could create objects that have no
-associated metadata entries. Third, updates to the metadata or object store
-service should be an atomic operation, but due to a lack of coordination, a
-window where the system is inconsistent appears.
+create a dangling entry in the metadata service that does not correspond to any
+objects in the object store. Second, a client could create orphaned objects
+that have no associated metadata entries. Third, updates to the metadata or
+object store service should be an atomic operation, but due to a lack of
+coordination, a window where the system is inconsistent appears.
 
 Ultimately, the consistency semantics required must be determined. If a
 metadata service is required and it must be in sync with the object storage
@@ -628,9 +638,9 @@ container. Since copying data from the IOD layer to the DAOS layer requires an
 explicit persist call, how and when synchronizing the metadata across the
 layers and potentially across machines occurs is undefined. Delaying
 synchronization until an explicit persist is called will reduce the update
-frequency, but delays the data visibility. Ideally, the metadata object would
-need to be automatically persisted every time a container transaction is
-persisted to the DAOS layer.
+frequency, but delays the data visibility on other platforms. Ideally, the
+metadata object would need to be automatically persisted every time a container
+transaction is persisted to the DAOS layer.
 
 The implication of this is that every transaction persist is double operation
 to account for the metadata persist. More importantly, the IOD-layer version of
@@ -641,10 +651,10 @@ layers still needs to be explored.
 A point of confusion rather than a potential design challenge is the change in
 definitions between the IOD layer and the DAOS layer.  For the IOD layer, a
 container is a collection of objects. For the DAOS layer, a container is a
-collection of shards. For the IOD an object may be a shard of a global array.
-For DAOS, a shard can host a set of DAOS objects. Having the same names with
-locally correct, globally conflicting definitions serves to confuse how the
-system should work.
+collection of objects across a set of shards. For the IOD an object may be a
+shard of a global array.  For DAOS, a shard can host a set of DAOS objects.
+Having the same names with locally correct, globally conflicting definitions
+serves to confuse how the system should work.
 
 \section{Conclusions}
 \label{sec:conclusion}

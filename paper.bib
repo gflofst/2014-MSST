@@ -376,6 +376,14 @@
     key={FastForward},
 }
 
+@string{procof = {Proceedings of}}
+
+@string{procofthe = procof # { the }}
+
+@string{cluster = {IEEE International Conference on Cluster Computing}}
+
+@string{cluster2006 = procofthe # cluster}
+
 @inproceedings{oldfield:lwfs,
         Abstract = {Today?s high-end massively parallel processing (MPP) machines have
         thousands to tens of thousands of processors, with next-generation
@@ -420,3 +428,21 @@
 	Title = {{Ceph}: A Scalable, High-Performance Distributed File System},
 	Year = 2006}
 
+@misc{hdf5,
+ author={The HDF Group},
+ title={Hierarchical data format, version 5, 2000-2014},
+ URL={http://www.hdfgroup.org/HDF5}
+}
+
+@INPROCEEDINGS{nowoczynski:2008:zest,
+author={Nowoczynski, P. and Stone, N. and Yanovich, J. and Sommerfield, J.},
+booktitle={Petascale Data Storage Workshop, 2008. PDSW '08. 3rd}, title={Zest Checkpoint storage system for large supercomputers},
+year={2008},
+month={nov.},
+volume={},
+number={},
+pages={1 -5},
+abstract={The PSC has developed a prototype distributed file system infrastructure that vastly accelerates aggregated write bandwidth on large compute platforms. Write bandwidth, more than read bandwidth, is the dominant bottleneck in HPC I/O scenarios due to writing checkpoint data, visualization data and post-processing (multi-stage) data. We have prototyped a scalable solution that will be directly applicable to future petascale compute platforms having of order 10^6 cores. Our design emphasizes high-efficiency scalability, low-cost commodity components, lightweight software layers, end-to-end parallelism, client-side caching and software parity, and a unique model of load-balancing outgoing I/O onto high-speed intermediate storage followed by asynchronous reconstruction to a 3rd-party parallel file system.},
+keywords={HPC I-O scenarios;asynchronous reconstruction;checkpoint storage system;client-side caching;data checkpoint;data visualization;end-to-end parallelism;high-speed intermediate storage;load-balancing;parallel file system;petascale compute platforms;post-processing data;prototype distributed file system infrastructure;software layers;software parity;checkpointing;data visualisation;input-output programs;mainframes;parallel processing;program verification;resource allocation;},
+doi={10.1109/PDSW.2008.4811883},
+ISSN={},}
