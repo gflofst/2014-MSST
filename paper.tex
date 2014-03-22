@@ -27,7 +27,7 @@
 
 \hyphenation{sub-trans-ac-tion}
 
-\addtolength{\parskip}{-0.04in}
+\addtolength{\parskip}{-0.06in}
 
 % in order for balance columns to work, it has to be before begin document...
 %\balancecolumns
@@ -55,26 +55,30 @@
 \maketitle
 
 \begin{abstract}
-With phase 1 of the Fast Forward Storage and IO Stack project complete, it is
-an excellent opportunity to evaluate many of the decisions made to feed into
-the phase 2 effort. The initial effort to define a next generation storage
-system has made admirable contributions in architecture and design. Formalizing
-the general idea of data staging into burst buffers for the storage system will
-help manage the performance variability and offer additional data processing
-opportunities outside the main compute and storage system. Adding a
-transactional mechanism to manage faults and data visibility helps enable
-effective analytics without having to work around the IO stack semantics.
+The DOE Extreme-Scale Technology Acceleration Fast Forward Storage and IO Stack
+project is going to have significant impact on storage systems design within
+and beyond the HPC community. With phase 1 of the project complete, it is an
+excellent opportunity to evaluate many of the decisions made to feed into the
+phase 2 effort. With this paper we not only provide a timely summary of
+important aspects of the design specifications but also capture the underlying
+reasoning that is not available elsewhere.
 
-While these and other contributions are valuable, similar efforts made
-elsewhere may offer attractive alternatives or differing semantics that could
-yield a more feature rich environment with little to no additional overhead.
-For example, the Doubly Distributed Transactions (\DDTns) protocol offers an
-alternative approach for incorporating transactional semantics into the data
-path. Another project, PreDatA, examined how to get the best throughput for
-data operators and may offer additional insights into further refinements of
-the Burst Buffer concept.
+The initial effort to define a next generation storage system has made
+admirable contributions in architecture and design.  Formalizing the general
+idea of data staging into burst buffers for the storage system will help manage
+the performance variability and offer additional data processing opportunities
+outside the main compute and storage system. Adding a transactional mechanism
+to manage faults and data visibility helps enable effective analytics without
+having to work around the IO stack semantics. While these and other
+contributions are valuable, similar efforts made elsewhere may offer attractive
+alternatives or differing semantics that could yield a more feature rich
+environment with little to no additional overhead. For example, the Doubly
+Distributed Transactions (\DDTns) protocol offers an alternative approach for
+incorporating transactional semantics into the data path. Another project,
+PreDatA, examined how to get the best throughput for data operators and may
+offer additional insights into further refinements of the Burst Buffer concept.
 
-This paper examines some of the choices made by the FastForward team and
+This paper examines some of the choices made by the Fast Forward team and
 compares them with other options and offers observations and suggestions based
 on these other efforts.  This will include some non-core contributions of other
 projects, such as some of the demonstration metadata and data storage
@@ -110,16 +114,17 @@ on every node, while a potentially advantageous approach, is not financially
 feasible. With this in mind, the second phase will refine this design
 incorporating fault recovery and other features missing from the first phase.
 
-The overall design seeks to offer byte-granular, multi-version concurrency
-control. Through the use of a copy-on-write style mechanism, multiple versions
-of an object can be stored in potentially greatly reduced space. It assumes the
-client interface will be through an IO library affording a more complicated
-interface that offers richer functionality requiring only minimal end-user code
-changes.  Managing most data access in a platform-local layer rather than
-requiring writing to centralized storage will better support the performance
-and energy requirements of extreme scale integrated application workflows. At a
-more detailed view, the various layers of the IO stack each contribute
-different functionality and performance implications.
+The overall design seeks to offer high availability, byte-granular,
+multi-version concurrency control. Through the use of a copy-on-write style
+mechanism, multiple versions of an object can be stored in potentially greatly
+reduced space. It assumes the client interface will be through an IO library
+affording a more complicated interface that offers richer functionality
+requiring only minimal end-user code changes.  Managing most data access in a
+platform-local layer rather than requiring writing to centralized storage will
+better support the performance and energy requirements of extreme scale
+integrated application workflows. At a more detailed view, the various layers
+of the IO stack each contribute different functionality and performance
+implications.
 
 The basic architecture incorporates five layers. The top layer is a high level
 IO library, such as the demonstration HDF-5 library~\cite{hdf5}. The intent is
@@ -130,8 +135,8 @@ dispatching layer.  This IO forwarding layer is analogous to the function of
 the IO nodes in a BlueGene machine. The next two layers have considerable
 functionality. The IO dispatcher (IOD) serves as the primary storage interface
 for the IO stack and is the only way to reach the persistent storage array in
-lower layers. The Data Access Object Storage (DAOS) layer serves as the
-persistent storage interface and is intended to be the foundation on which
+lower layers. The Distributed Application Object Storage (DAOS) layer serves as
+the persistent storage interface and is intended to be the foundation on which
 everything else is built with no dependence on any technologies specified above
 it. For example, the IOD layer and burst buffers are not required for DAOS to
 operate properly. At the bottom is the Versioning Object Storage Device (VOSD).
@@ -197,25 +202,24 @@ The desired outcome of these initial studies is to motivate how such
 functionality might be incorporated and the potential benefits.  Later, these
 concepts were proposed to be incorporated as part of the IO
 stack~\cite{nowoczynski:2008:zest,bent:2012:challenges,bent:2012:burst-buffer}.
-The current FastForward IOD design recommends incorporating SSDs, but
+The current Fast Forward IOD design recommends incorporating SSDs, but
 specifically lists these devices as optional. Unfortunately, not incorporating
 burst buffers and the use of SSDs in the IOD layer may be problematic.  First,
-the IOD and DAOS designs currently are written assuming burst buffers. This
-means that the bulk of IO operations will only hit the IOD layer and proposed
-functionality, such as the function shipping, do not discuss the impact on the
-DAOS layer or the operators themselves should a burst buffer not be available.
-Consider the important functionality of data rearrangement and doing things
-like changing the fast array dimension on shared, spinning media.  The design
-of DAOS assumes that it will only be involved when persisting a completed
-transaction and only for a fraction of the total transactions created.
-Transaction frequency at the IOD layer can be higher since IOD does not
-``flatten'' transactions. Flattening is the process of transfering the set of
-copy-on-write changes from transaction/epoch $n$ to transaction $n+m$ into the
-DAOS layer. The DAOS layer mirrors the copy-on-write functionality, but stores
-the differences between epochs rather than individual transactions. The primary
-difference is that at the DAOS layer, data is stored in large, logically
-contiguous chunks to manage the metadata load and hopefully improve read
-performance.
+the IOD design currently is written assuming burst buffers. This means that the
+bulk of IO operations will only hit the IOD layer and proposed functionality,
+such as the function shipping, do not discuss the impact on the DAOS layer or
+the operators themselves should a burst buffer not be available.  Consider the
+important functionality of data rearrangement and doing things like changing
+the fast array dimension on shared, spinning media.  The design of DAOS assumes
+that it will only be involved when persisting a completed transaction and only
+for a fraction of the total transactions created.  Transaction frequency at the
+IOD layer can be higher since IOD does not ``flatten'' transactions. Flattening
+is the process of transferring the set of copy-on-write changes from
+transaction/epoch $n$ to transaction $n+m$ into the DAOS layer. The DAOS layer
+mirrors the copy-on-write functionality, but stores the differences between
+epochs rather than individual transactions. The primary difference is that at
+the DAOS layer, data is stored in large, logically contiguous chunks to manage
+the metadata load and hopefully improve read performance.
 
 One of the bigger concerns is the observation that the original data staging
 proposals all used compute nodes while the newer proposals seek not only to
@@ -250,7 +254,7 @@ SSDs is questionable. Recent studies have shown that the erase-before-write
 and interference between reading and writing with flash-based SSDs can cause
 severe performance problems~\cite{skourtis:2013:ssd-performance}. The inclusion
 of an optional use SSD layer in the new Trinity machine at Los Alamos will
-offer a testbed to determine how likely these observed problems would affect a
+offer a test bed to determine how likely these observed problems would affect a
 production extreme scale platform.
 
 %Current NAND-based flash devices top out at around 400 MB/sec.
@@ -307,17 +311,17 @@ node resources for these operations, serious work will be required to make a
 fully functional end-to-end IOD layer implementation for a production system.
 
 Another concern that is acknowledged, but no thought has been applied to, is
-the requirement that a single IOD process be the master for any operation.
-Should the number of concurrent applications exceed the available nodes,
-sharing an IOD process will be required. The requirements both in terms of
-scheduling and resource management were cut from the project due to funding
-limitations. Since partitioning of the IOD processes for exclusive use by
-particular applications is the assumed operating mode, should insufficient IOD
-resources be available, either a job could be delayed or IOD resources could be
-reallocated from a different process could be redeployed for use by the new
-job. Handling resilience concerns for the IOD processes must also be address.
-These sorts of considerations still need to be made for a full production
-system.
+the requirement that a single IOD process of the set assigned to an application
+is the master for any operation.  Should the number of concurrent applications
+exceed the available nodes, sharing an IOD process will be required. The
+requirements both in terms of scheduling and resource management were cut from
+the project due to funding limitations. Since partitioning of the IOD processes
+for exclusive use by particular applications is the assumed operating mode,
+should insufficient IOD resources be available, either a job could be delayed
+or IOD resources could be reallocated from a different process could be
+redeployed for use by the new job. Handling resilience concerns for the IOD
+processes must also be address.  These sorts of considerations still need to be
+made for a full production system.
 
 \section{Transactions and Epochs}
 \label{sec:transactions}
@@ -368,8 +372,10 @@ automatically committed.
 Undocumented, but inherent in the design of these transactions is how faults
 are detected. The initial design assumes the current Lustre fault detection
 mechanism that can determine if a process or node is no longer reachable. This
-defines how a fault will be detected and what will trigger a passive fault
-recovery (i.e., transaction abort).
+detection happens at the DAOS layer and when a fault is detected, the rollback
+process is pushed up to the IOD layer for all non-persisted or non-committed
+transactions. This defines how a fault will be detected and what will trigger a
+passive fault recovery (i.e., transaction abort).
 
 There are two steps for beginning a transaction on a container. The first step
 is for one or more process to open the container. This handle can be shared
@@ -412,7 +418,7 @@ systems.  Eliminating metadata management as a special case and instead
 treating it just as data is a central design goal of the Fast Forward project.
 This is a hybrid approach to metadata management that is half-way between
 providing no inherent metadata support and having a fully integrated, but
-separate metadata manaegement system.
+separate metadata management system.
 
 Eliminating metadata as a core component of a file system is not new. It has
 been explored as part of the Light Weight File Systems
