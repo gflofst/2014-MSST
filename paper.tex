@@ -27,7 +27,8 @@
 
 \hyphenation{sub-trans-ac-tion}
 
-\addtolength{\parskip}{-0.06in}
+% change the inter-paragraph spacing
+%\addtolength{\parskip}{-0.06in}
 
 % in order for balance columns to work, it has to be before begin document...
 %\balancecolumns
@@ -126,6 +127,19 @@ integrated application workflows. At a more detailed view, the various layers
 of the IO stack each contribute different functionality and performance
 implications.
 
+The overall target machine architecture is illustrated in
+Figure~\ref{fig:architecture}.
+
+\begin{figure}[ht]
+%\vspace{-0.15in}
+\centering
+\includegraphics[keepaspectratio=true, width=\columnwidth]{images/architecture}
+%\vspace{-0.15in}
+\caption{Target Machine Architecture}
+\label{fig:architecture}
+%\vspace{-0.15in}
+\end{figure}
+
 The basic architecture incorporates five layers. The top layer is a high level
 IO library, such as the demonstration HDF-5 library~\cite{hdf5}. The intent is
 to only have access to the storage stack through such an API to manage the
@@ -179,20 +193,88 @@ potential challenges with the design as written. These ideas are presented to
 give a fuller picture of where the project is going rather than dwelling on the
 limitations of the published documents.
 
-The rest of the paper is organized as follows. Section~\ref{sec:burst}
-discusses some of the features of incorporating burst buffers as designed and
-suggests some considerations and alternatives for the next generation of this
-project. Section~\ref{sec:transactions} discusses the transactions approach
-offered in the IOD layer and the corresponding epochs in the DAOS layer. It
-also offers a comparison to the \DDT system given the very similar high-level
-design and motivating use case.  Section~\ref{sec:summary} discusses the system
-overall with recommendations on what design elements should be considered based
-on broader issues with current HPC data centers. The paper is concluded in
+The rest of the paper is organized as follows. First, an overview of the
+target machine architecture and how it maps to the proposed components is
+presented in Section~\ref{sec:overview}. Section~\ref{sec:burst} provides a
+more detailed overview of the IOD layer and discusses some of the features of
+incorporating burst buffers as designed and suggests some considerations and
+alternatives for the next generation of this project.
+Section~\ref{sec:transactions} discusses the transactions approach offered in
+the IOD layer and the corresponding epochs in the DAOS layer. It also offers a
+comparison to the \DDT system given the very similar high-level design and
+motivating use case.  Section~\ref{sec:summary} discusses the system overall
+with recommendations on what design elements should be considered based on
+broader issues with current HPC data centers. The paper is concluded in
 Section~\ref{sec:conclusion} with a summary of the broad issues covered in the
 paper.
 
-\section{Burst Buffers}
+\section{Overview}
+\label{sec:overview}
+
+The demonstration system uses some particular existing technology to enable
+testing the proposed concepts. The mapping is presented in
+Figure~\ref{fig:arch-mapping}. We examine this mapping by evaluating the
+descriptive blocks at the bottom of the figure.
+
+\begin{figure}[ht]
+%\vspace{-0.15in}
+\centering
+\includegraphics[keepaspectratio=true, width=\columnwidth]{images/arch-mapping}
+%\vspace{-0.15in}
+\caption{Mapping FFSIO Components to Machine Architecture}
+\label{fig:arch-mapping}
+%\vspace{-0.15in}
+\end{figure}
+
+The dark blue block that includes the HDF5 VOL block represents the User API
+layer. It is worth noting that while this is the intended interaction
+mechanism, it is still possible for other interfaces like MPI-IO and POSIX to
+interact with the system. The IO Forwarding layer is represented by the two
+black boxes. The represented split shows that the IO nodes can offer some
+control over how data is moved from the compute area towards storage. The
+IO dispatcher, the primary focus of the evaluation presented in this paper, is
+shown in the light green box. The one extension is the dark pink block
+representing technology like SSDs on the IO nodes. This is where a burst
+buffer, if the NVRAM is available, would be hosted. The DAOS layer is the
+yellow box. The VOSD is the purple box.
+
+The specification of HDF5 and Lustre at the top and bottom of the stack is 
+an expedience for demonstrating the functionality. In a production version of
+the proposed system, these may be represented by other technologies.
+
+Throughout the paper, multiple terms are used to define an operation applied to
+data outside of the main application computation. These include both function
+shipping and just the term operator. In all cases, the idea is a piece of code
+is placed at some location along the IO path processing data as it passes
+through that point. Note that this works in both directions as well as in
+place. For example, when reading, an operator may be used to only retrieve the
+pieces of a large data set from the DAOS and VOSD layers into the IOD caches
+automatically.  It is also possible that an operator is deployed to either
+rearrange data or generate a new copy with different ordering. For example,
+changing the fast dimension for a multi-dimensional array can greatly improve
+reading performance for particular reading patterns. In all cases, these
+operators offer a chance to apply a relatively light piece of processing to
+data rather than an intensive data analytics operation. These heavy-weight
+operations should be left to the main computation resources leaving capacity
+for other concurrent applications using the IOD layer.
+
+\section{IOD Layer and Burst Buffers}
 \label{sec:burst}
+
+The IOD layer is intended to function as a higher performance, machine local
+caching layer for the DAOS/VOSD layers. Even in a simplified system, by keeping
+the IOD layer as part of the stack, making portable code is simpler since it
+eliminates the need to use a different lower level APIs from the user layer
+(e.g., HDF5) if the system lacks a feature, such as burst buffers. In an ideal
+design, the IOD API could function solely an directly on the DAOS servers. The
+reality is that performance demands and budget constraints will force something
+like burst buffers to compensate for the performance afforded and to offer a
+location to process data down to volumes that can fit through the limited
+bandwidth. Given the criticality of burst buffers and the transaction mechanism
+for end-to-end performance, these ideas are examined in detail below with
+comparison to alternatives that may have been avoided due to perceived
+performance limitations. In particular, the \DDT protocol was designed to
+address these sorts of scenarios and has demonstrated excellent performance.
 
 The idea of burst buffers were initially explored in the context of data
 staging~\cite{abbasi:2007:datatap,Abbasi:2009:datatap,nisar:2008:staging,zheng:2010:predata}.
@@ -221,20 +303,19 @@ epochs rather than individual transactions. The primary difference is that at
 the DAOS layer, data is stored in large, logically contiguous chunks to manage
 the metadata load and hopefully improve read performance.
 
-One of the bigger concerns is the observation that the original data staging
-proposals all used compute nodes while the newer proposals seek not only to
-make them a fixed portion of the IO stack, but also shared across all machine
-users. The PreDatA~\cite{zheng:2010:predata} paper in particular examines the
-potential costs and advantages of where to place operators similar to the IOD
-proposed function shipping. There are two key takeaways from PreDatA. First,
-placement matters.  Depending on the communication intensity vs. computation
-intensity, where along the IO path to place the operation can matter
-significantly. Second, and more importantly, the amount of time spent
-processing for the operators was stretched to the point where it consumed
-nearly all of the time between IO operations. The given ratios of compute
-processes to staging process examined is representative for future extreme
-scale platforms. If anything, the ratios offer more staging processes than IOD
-processes would be available.
+One of the bigger concerns is that the original data staging proposals all used
+compute nodes while the newer proposals seek not only to make them a fixed
+portion of the IO stack, but also shared across all machine users. The
+PreDatA~\cite{zheng:2010:predata} paper in particular examines the potential
+costs and advantages of where to place operators similar to the IOD proposed
+function shipping. There are two key takeaways from PreDatA. First, placement
+matters.  Depending on the communication intensity vs. computation intensity,
+where along the IO path to place the operation can matter significantly.
+Second, and more importantly, the amount of time spent processing for the
+operators was stretched to the point where it consumed nearly all of the time
+between IO operations. The given ratios of compute processes to staging process
+examined is representative for future extreme scale platforms. If anything, the
+ratios offer more staging processes than IOD processes would be available.
 
 In the case of the written IOD design, it describes a fixed-sized staging area
 that is partitioned on a per-application basis.  This is unlikely to be useful
@@ -249,30 +330,36 @@ stack, three problems arise.  First, the amount of network bandwidth, IO
 bandwidth, and compute power consumed for example operations from a single
 application is likely to completely monopolize the IOD processes. Second, if
 space and time partitioning is used instead, the functionality risks being too
-small to be useful. Third, the long-term hardware performance advantage for
-SSDs is questionable. Recent studies have shown that the erase-before-write
-and interference between reading and writing with flash-based SSDs can cause
-severe performance problems~\cite{skourtis:2013:ssd-performance}. The inclusion
-of an optional use SSD layer in the new Trinity machine at Los Alamos will
-offer a test bed to determine how likely these observed problems would affect a
-production extreme scale platform.
+small to be useful. For example, if some of the IO nodes are dedicated either
+throughout an application run (space partitioning) or for just phases of the
+application runtime (time partitioning), the allocated capacity or ownership
+duration may be insufficient to be useful. Third, the long-term hardware
+performance advantage for SSDs is questionable. Recent studies have shown that
+the erase-before-write and interference between reading and writing with
+flash-based SSDs can cause severe performance
+problems~\cite{skourtis:2013:ssd-performance}. The inclusion of an optional use
+SSD layer in the new Trinity machine at Los Alamos will offer a test bed to
+determine how likely these observed problems would affect a production extreme
+scale platform.
 
-%Current NAND-based flash devices top out at around 400 MB/sec.
-%The key spec that is missing from this number is that 400 MB/sec is a measure
-%of the fixed number of available IOPS multiplied by the block size. This
-%represents the ideal streaming performance possible. The problem is that it
-%costs an IOP to read 1 byte or 1 block (4KB or 8KB, depending on the device).
-%It costs 1 IOP to write a full block--usually. In some cases, it will cost 2
-%IOPs.  This accounts for the required pre-erase write prior to writing to a
-%reused block. In the worst case, it can be 3 IOPS per write. This would be for
-%a partial block write (read the old block, erase, write the modified block).
-%One-third of 400 MB/sec, about 133 MB/sec, is well below the streaming
-%performance of HDDs.  Granted, there is still rotational and seek latency to
-%deal with for HDDs, but the advantage for SSDs has evaporated and potentially
-%turned into a penalty at a considerable cost premium.  There are faster SSD
-%solutions on the market that incorporate DRAM for caching and using the PCIe
-%bus, for example, but their price precludes them from use in an extreme scale
-%platform.
+Current NAND-based flash devices top out at around 400 MB/sec.  The key spec
+that is missing from this number is that 400 MB/sec is a measure of the fixed
+number of available IOPS multiplied by the block size. This represents the
+ideal streaming performance possible. The problem is that it costs an IOP to
+read 1 byte or 1 block (4KB or 8KB, depending on the device).  It costs 1 IOP
+to write a full block--usually. In some cases, it will cost 2 IOPs.  This
+accounts for the required pre-erase write prior to writing to a reused block.
+In the worst case, it can be 3 or more IOPS per write. For example, if writing
+forces both garbage collection and block compaction, many blocks may have to be
+read, the data combined, the blocks erased, the combined data written, and then
+the intended write operation can finally proceed on the newly freed blocks
+(erase and then write).  One-third of 400 MB/sec, about 133 MB/sec, is well
+below the streaming performance of HDDs.  Granted, there is still rotational
+and seek latency to deal with for HDDs, but the advantage for SSDs has
+evaporated and potentially turned into a considerable penalty at a cost
+premium.  There are faster SSD solutions on the market that incorporate DRAM
+for caching and using the PCIe bus, for example, but their price precludes them
+from use in an extreme scale platform given budget constraints.
 
 Given these features, the optionality and even incorporation of burst buffers
 in the current design should be carefully considered. Much of the advanced, key
@@ -323,7 +410,7 @@ redeployed for use by the new job. Handling resilience concerns for the IOD
 processes must also be address.  These sorts of considerations still need to be
 made for a full production system.
 
-\section{Transactions and Epochs}
+\section{Transactions, Epochs, and Metadata}
 \label{sec:transactions}
 
 The transaction mechanism manifests in two forms. At the IOD layer, they are
@@ -342,31 +429,33 @@ problem.
 To understand how transactions are used in the IOD layer, some terminology and
 concepts must be explained first. At the coarsest grain level is a container.
 Each container provides the single access context through which to access a
-collection of objects. Transactions are the way that a series of modifications
-to the objects within a container are treated atomically. Conceptually,
-containers corresponds to a something akin to an HDF5 file in a traditional
-file system. The objects in each container represent different data within a
-file.  The three initially defined object types are key-value stores,
-multi-dimensional arrays, and blobs.  The easiest way to understand these types
-is to evaluate these from the perspective of an HDF-5 file, the initial user
-interface layer. The key-value store represents a collection of attributes or
-groups. The array represents a potentially multi-dimensional array.  The blob
-represents a byte stream of arbitrary contents.  The fundamental difference
-between an array and a blob is that the array has metadata specifying the
-dimension(s). At the physical layer within the IO nodes, all of these objects
-may be striped across multiple IO nodes.  Given this context, the transactions
-come in two forms.
+collection of objects. Transactions are used to treat a series of modifications
+to the objects within a container atomically. Conceptually, containers
+corresponds to a something akin to an HDF5 file in a traditional file system.
+The objects in each container represent different data within a file.  The
+three initially defined object types are key-value stores, multi-dimensional
+arrays, and blobs.  The easiest way to understand these types is to evaluate
+these from the perspective of an HDF-5 file, the initial user interface layer.
+The key-value store represents a collection of attributes or groups. The array
+represents a potentially multi-dimensional array.  The blob represents a byte
+stream of arbitrary contents.  The fundamental difference between an array and
+a blob is that the array has metadata specifying the dimension(s). At the
+physical layer within the IO nodes, all of these objects may be striped across
+multiple IO nodes.  Given this context, the transactions come in two forms.
 
-First is a single leader transaction where the IOD manages based on calls from
-a single client. The underlying assumption is that the client side will manage
+First is a single leader transaction managed by IOD based on calls from a
+single client. The underlying assumption is that the client side will manage
 the transactional operations itself and the single client is capable of
-reporting to the IOD how to evolve the transaction state. 
+reporting to the IOD how to evolve the transaction state. Passive failures are
+detected based on the single client only. Any actively detected failure will
+have to be managed by this single client.
 
 The second form is called multi-leader and has the IOD layer manage the
-transactions. In this case, when the transaction is created, a count of clients
-is provided to the IOD layer. As clients commit their changes to the container,
-the reference count is reduced. Once the count reaches 0, the transaction is
-automatically committed.
+transactions from a collection of clients. In this case, when the transaction
+is created, a count of clients is provided to the IOD layer. As clients commit
+their changes to the container, the reference count is reduced. Once the count
+reaches 0, the transaction is automatically committed. Failure detection is
+fully passive based on all participating clients.
 
 \subsubsection{Design Philosophy}
 Undocumented, but inherent in the design of these transactions is how faults
@@ -486,6 +575,53 @@ the file system will have to be maintained by the object storage service. The
 lack of a centralized, serialized bottleneck to store that information improves
 concurrency.
 
+\subsection{Comparison to Other Protocols}
+Alternatives, such as Paxos~\cite{Lamport:1998:paxos} algorithms like
+ZooKeeper~\cite{Hunt:2010:zookeeper}, suffer from two limitations making them
+unsuitable for this environment. First, the distributed servers in Paxos
+systems are all distributed copies of each other that eventually become
+consistent. Given the scale we wish to address, a single node's memory is
+unlikely to be able to hold all of the data necessary for many operations at
+scale. They also do not have a guarantee for when consensus will be achieved
+without using slower synchronous calls. For the tight timing we wish to
+support, we need guarantees of when a consistent state has been achieved.
+Second, these systems also all assume that updates are initiated from a single
+client process rather than a parallel set of processes as is the standard in
+HPC environments.
+
+Another effort to offer consistency and data integrity for the ZFS file
+system~\cite{zhang:2010:zfs} covers some of the same territory. Instead of a
+focus on the processes all having a notion of completion as a transaction, this
+work focuses on the integrity of the data movement operations. We view this
+work as something that should be considered hand-in-hand with a transaction
+approach to ensure the integrity of the movement of the data in addition to the
+agreement of processes about the successful completion of a parallel operation.
+
+The transactions and epochs approach offered by FFSIO is most similar to
+\DDT, but is a specialized implementation of a similar protocol. In this case,
+\DDT is general and must use more general techniques. The FFSIO transactions
+and epochs take advantage of simplifications based on the architecture and the
+very specific use.
+
+\DDT uses a second layer of coordination on the client side that greatly
+increases the scalability by consolidating messages from clients into unique
+sets prior to sending to the overall coordinator. A gossip
+protocol~\cite{ganesh:2003:gossip-protocols} may appear sufficient for this
+purpose, but the delay of eventual consistency is strictly avoided with this
+protocol to ensure guarantees at particular states in the code. For example, if
+a failure occurs, the global understanding of the role of all processes is
+required in order for effective communication to occur for operations like
+creating sub-transactions or voting. In this case, the protocol can offer
+stronger statements about consistency than these protocols offer.  These
+features offer a way to easily scale the transaction protocol given the
+guarantees we wish to offer. The IOD approach does nothing to address these
+concerns.
+
+The details of \DDT is discussed next to offer a performance evaluation that
+may be slower than FFSIO transactions and epochs for synchronous due to the
+explicit messaging rather than relying on the hardware mechanisms. At scale,
+the FFSIO performance should be similar to the \DDT approach.
+
 \subsection{Comparison to \DDTns}
 The \DDT project~\cite{lofstead:2012:txn} sought to develop an efficient
 approach for handling ACID-style transactions in an environment with parallel
@@ -504,61 +640,61 @@ The example metadata and data storage services created as part of the \DDT
 project have no dependencies between transactions that prevent visibility
 should an older version be incomplete. This additional, intentional requirement
 by IOD offers different functionality than \DDTns's example services. In the
-case of \DDTns, the functionality is more minimal, but also avoids some of the
-concerns outlined below.
+case of \DDTns, the functionality is less, but also avoids some of the concerns
+outlined below.
 
 The second iteration of the protocol~\cite{lofstead:2013:pdsw-txn} fixed
 scalability issues and demonstrated a scalable client-side coordination model
 with excellent performance. The performance measured for a complex transaction
 with \DDT is illustrated in Figure~\ref{fig:performance}. This performance is
 explored in detail in a previous paper~\cite{lofstead:2013:pdsw-txn}.
-%The
-%breakdown of the number of participants in each role is shown in
-%Table~\ref{tab:scaling}. For comparison, consider the Number of
-%Sub-Coordinators equivalent to IOD processes. The Processes Per Sub-Coordinator
-%represents the number of clients that use a particular IOD process. For these
-%tests, we maintained a balanced distribution and always used at least two
-%sub-coordinators to slow down the processing.
+The
+breakdown of the number of participants in each role is shown in
+Table~\ref{tab:scaling}. For comparison, consider the Number of
+Sub-Coordinators equivalent to IOD processes. The Processes Per Sub-Coordinator
+represents the number of clients that use a particular IOD process. For these
+tests, we maintained a balanced distribution and always used at least two
+sub-coordinators to slow down the processing.
 
 \begin{figure}[ht]
 %\vspace{-0.15in}
 \centering
-\includegraphics[keepaspectratio=true, width=0.9\columnwidth]{images/performance}
-\vspace{-0.15in}
+\includegraphics[keepaspectratio=true, width=\columnwidth]{images/performance}
+%\vspace{-0.15in}
 \caption{Total Transaction Overhead}
 \label{fig:performance}
 %\vspace{-0.15in}
 \end{figure}
 
-%\begin{table}[ht]
-%    \vspace{-0.15in}
-%    \centering
-%    \caption[Scaling Configuration]{Performance Tests Scaling Configuration}
-%    \bigskip
-%    \vspace{-0.15in}
-%
-%    \begin{tabular}{|r|r|r|}
-%\hline
-%Processes & \vtop{\hbox{\strut Number of}\hbox{\strut Sub-Coordinators}} & \vtop{\hbox{\strut Processes Per} \hbox{\strut Sub-Coordinator}}\\
-%\hline
-%%8 & 2 & 4 \\
-%%16 & 2 & 8 \\
-%%32 & 2 & 16 \\
-%%64 & 2 & 32 \\
-%%128 & 2 & 64 \\
-%256 & 2 & 128 \\
-%512 & 2 & 256 \\
-%1024 & 4 & 256 \\
-%2048 & 8 & 256 \\
-%4096 & 16 & 256 \\
-%8192 & 32 & 256 \\
-%16384 & 64 & 256 \\
-%32768 & 128 & 256 \\
-%65536 & 256 & 256 \\
-%\hline
-%    \end{tabular}
-%    \label{tab:scaling}
-%\end{table}
+\begin{table}[ht]
+    %\vspace{-0.15in}
+    \centering
+    \caption[Scaling Configuration]{Performance Tests Scaling Configuration}
+    \bigskip
+    %\vspace{-0.15in}
+
+    \begin{tabular}{|r|r|r|}
+\hline
+Processes & \vtop{\hbox{\strut Number of}\hbox{\strut Sub-Coordinators}} & \vtop{\hbox{\strut Processes Per} \hbox{\strut Sub-Coordinator}}\\
+\hline
+%8 & 2 & 4 \\
+%16 & 2 & 8 \\
+%32 & 2 & 16 \\
+%64 & 2 & 32 \\
+%128 & 2 & 64 \\
+256 & 2 & 128 \\
+512 & 2 & 256 \\
+1024 & 4 & 256 \\
+2048 & 8 & 256 \\
+4096 & 16 & 256 \\
+8192 & 32 & 256 \\
+16384 & 64 & 256 \\
+32768 & 128 & 256 \\
+65536 & 256 & 256 \\
+\hline
+    \end{tabular}
+    \label{tab:scaling}
+\end{table}
 
 At a high level, both \DDT and the IOD transactions have the same design. In
 both cases, a hierarchical model is employed. In the case of \DDTns, it is a
@@ -589,8 +725,8 @@ successful only redoing the minimum amount of work required.
 
 \begin{figure}[ht]
 \centering
-\includegraphics[keepaspectratio=true, width=0.5\columnwidth]{images/optimized-protocol}
-\vspace{-0.15in}
+\includegraphics[keepaspectratio=true, width=0.8\columnwidth]{images/optimized-protocol}
+%\vspace{-0.15in}
 \caption{Optimized Protocol}
 \label{fig:optimized-protocol}
 %\vspace{-0.25in}
@@ -621,42 +757,6 @@ that matches with different programming models, such as Charm++ or other
 task-based approaches. Since it can work for the bulk-synchronous model also,
 it is a more broadly applicable approach. This assumes that the observed
 potential issues can be addressed successfully.
-
-%\subsection{Comparison to Other Protocols}
-%Alternatives, such as Paxos~\cite{Lamport:1998:paxos} algorithms like
-%ZooKeeper~\cite{Hunt:2010:zookeeper}, suffer from two limitations making them
-%unsuitable for this environment. First, the distributed servers in Paxos
-%systems are all distributed copies of each other that eventually become
-%consistent. Given the scale we wish to address, a single node's memory is
-%unlikely to be able to hold all of the data necessary for many operations at
-%scale. They also do not have a guarantee for when consensus will be achieved
-%without using slower synchronous calls. For the tight timing we wish to
-%support, we need guarantees of when a consistent state has been achieved.
-%Second, these systems also all assume that updates are initiated from a single
-%client process rather than a parallel set of processes as is the standard in
-%HPC environments.
-%
-%\DDT uses a second layer of coordination on the client side that greatly
-%increases the scalability by consolidating messages from clients into unique
-%sets prior to sending to the overall coordinator. A gossip
-%protocol~\cite{ganesh:2003:gossip-protocols} may appear sufficient for this
-%purpose, but the delay of eventual consistency is strictly avoided with this
-%protocol to ensure guarantees at particular states in the code. For example, if
-%a failure occurs, the global understanding of the role of all processes is
-%required in order for effective communication to occur for operations like
-%creating sub-transactions or voting. In this case, the protocol can offer
-%stronger statements about consistency than these protocols offer.  These
-%features offer a way to easily scale the transaction protocol given the
-%guarantees we wish to offer. The IOD approach does nothing to address these
-%concerns.
-%
-%Another effort to offer consistency and data integrity for the ZFS file
-%system~\cite{zhang:2010:zfs} covers some of the same territory. Instead of a
-%focus on the processes all having a notion of completion as a transaction, this
-%work focuses on the integrity of the data movement operations. We view this
-%work as something that should be considered hand-in-hand with a transaction
-%approach to ensure the integrity of the movement of the data in addition to the
-%agreement of processes about the successful completion of a parallel operation.
 
 \section{Broader Design}
 \label{sec:summary}
@@ -721,6 +821,9 @@ Sandia National Laboratories is a multi-program laboratory managed and operated
 by Sandia Corporation, a wholly owned subsidiary of Lockheed Martin
 Corporation, for the U.S. Department of Energy's National Nuclear Security
 Administration under contract DE-AC04-94AL85000.
+
+We wish to thank Eric Barton for the some of the figures used to illustrate
+the system architecture.
 
 \bibliographystyle{abbrv}
 \bibliography{paper}
